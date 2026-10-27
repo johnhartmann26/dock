@@ -73,11 +73,22 @@ enum AX {
     static func isFullScreen(_ el: AXUIElement) -> Bool { get(el, "AXFullScreen") ?? false }
     static func title(_ el: AXUIElement) -> String { get(el, kAXTitleAttribute) ?? "" }
 
-    /// Real document windows. Panels, popovers and floating palettes are left alone (they follow their app).
+    /// Real document windows. Panels, popovers and floating palettes are left alone (they follow their app),
+    /// and so is anything above normal window level or tiny: call indicators (Granola's), picture-in-picture,
+    /// HUDs. Those stay visible in every context, because parking them makes the app fight back (flicker).
     static func isManageable(_ el: AXUIElement) -> Bool {
         let role: String? = get(el, kAXRoleAttribute)
         let subrole: String? = get(el, kAXSubroleAttribute)
-        return role == kAXWindowRole && (subrole == kAXStandardWindowSubrole || subrole == kAXDialogSubrole)
+        guard role == kAXWindowRole, subrole == kAXStandardWindowSubrole || subrole == kAXDialogSubrole else { return false }
+        if let id = windowID(el), let level = windowLevel(id), level != 0 { return false }
+        if let f = frame(el), f.width < 80 || f.height < 80 { return false }
+        return true
+    }
+
+    /// The window server layer (0 = normal windows; floating panels and overlays sit higher).
+    static func windowLevel(_ id: CGWindowID) -> Int? {
+        let info = CGWindowListCopyWindowInfo([.optionIncludingWindow], id) as? [[String: Any]]
+        return info?.first?[kCGWindowLayer as String] as? Int
     }
 
     /// Chrome and Electron animate AX frame changes while AXEnhancedUserInterface is on (AeroSpace does the same toggle).

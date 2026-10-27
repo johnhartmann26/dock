@@ -64,6 +64,7 @@ Window assignments and each parked window's exact frame are written to `~/Librar
 - **Links from other apps:** if the browser puts the tab in a parked window, ContextDock switches to that window's context (it watches parked browser windows for a new tab for 2.5s after the browser comes forward). It can't tell when a link reuses a tab that already has the same title.
 - **Mission Control** shows parked windows tiny in a corner.
 - **Native full-screen windows** aren't moved. They keep their own Space.
-- **Floating panels and palettes** (Granola's notepad, ChatGPT's bar, Meet picture-in-picture) aren't managed, so they show in every context.
+- **Floating windows** (Granola's call indicator and notepad, ChatGPT's bar, picture-in-picture) aren't managed, so they show in every context. That covers anything above normal window level or smaller than 80×80.
+- **A faint sliver at the bottom right:** macOS keeps 1px × ~32px of each parked window, plus its shadow, on screen.
 - **Sleep and displays:** display off, lock and unlock were tested and held. Real system sleep and plugging/unplugging a display haven't been tested yet (the code re-pins parked windows on both).
 - **Restarting the Mac:** after a restart, windows get new ids, so they all start in the current context. Persistence across a restart is out of scope for v1.
