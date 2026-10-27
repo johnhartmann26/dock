@@ -302,3 +302,5 @@ The menu bar and the Dock stay live on top. Snapshots exist only in memory durin
 2. **Only the old picture moved.** The new layer's start and end positions were set in the same transaction, so it never animated. Now both layers get explicit `position.x` animations: old out, new in, by one screen width. Implicit actions are disabled, the duration is 0.3s, and the curve is (0.32, 0, 0.18, 1).
 
 Re-recorded: no flash, and both screens slide together over about 0.3s (frames 1.00–1.30s). Measured: snapshot 29ms, swap plus second snapshot 162ms, slide 312ms.
+
+John confirmed the slide looks right on his screen.
