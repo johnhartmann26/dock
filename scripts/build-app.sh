@@ -10,6 +10,11 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS"
 cp .build/release/ContextDock "$APP/Contents/MacOS/"
 cp Resources/Info.plist "$APP/Contents/"
-IDENTITY="${CODESIGN_IDENTITY:-$(security find-identity -v -p codesigning | grep -m1 'Apple Development' | sed -E 's/.*"(.*)"/\1/')}"
+# Keychain order isn't stable, and a different certificate voids the Accessibility grant, so the
+# first pick is remembered in .signing-identity (by SHA-1).
+if [[ -z "${CODESIGN_IDENTITY:-}" && ! -s .signing-identity ]]; then
+  security find-identity -v -p codesigning | grep -m1 'Apple Development' | awk '{print $2}' > .signing-identity || true
+fi
+IDENTITY="${CODESIGN_IDENTITY:-$(cat .signing-identity 2>/dev/null)}"
 codesign --force --options runtime --sign "${IDENTITY:--}" "$APP"
 echo "Built $APP (signed: ${IDENTITY:-ad-hoc})"

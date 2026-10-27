@@ -48,7 +48,7 @@ Window assignments and each parked window's exact frame are written to `~/Librar
 
 ## Known limits (v0.1)
 
-- **Links from other apps with Dia** can land in a parked window from another context, because Dia doesn't always open them in its focused window. See the open question in DECISIONS.md.
+- **Links from other apps:** if the browser puts the tab in a parked window, ContextDock switches to that window's context (it watches parked browser windows for a new tab for 2.5s after the browser comes forward). It can't tell when a link reuses a tab that already has the same title.
 - **Mission Control** shows parked windows tiny in a corner.
 - **Native full-screen windows** aren't moved. They keep their own Space.
 - **Floating panels and palettes** (Granola's notepad, ChatGPT's bar, Meet picture-in-picture) aren't managed, so they show in every context.

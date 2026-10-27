@@ -40,12 +40,20 @@ final class WindowEngine {
     private var saved: [CGWindowID: SavedWindow] = [:]
     private var ignoreFocusUntil = Date.distantPast
     private var awaitingWindow: (bundleID: String, until: Date)?
+    /// Browsers that just came forward, and until when a parked window's new tab counts as "a link landed here".
+    private var linkWatch: [pid_t: Date] = [:]
+    private var lastLinkSwitch = Date.distantPast
+    private var titles: [CGWindowID: String] = [:]
 
     private static let stateURL = DockConfig.url.deletingLastPathComponent().appendingPathComponent("state.json")
     private static let fallbackNewWindowApps: Set<String> = [
         "company.thebrowser.dia", "dev.serafim.fast", "com.apple.Safari", "com.google.Chrome",
         "company.thebrowser.Browser", "org.mozilla.firefox", "com.apple.Terminal", "com.microsoft.VSCode",
         "dev.zed.Zed", "com.apple.finder", "com.mitchellh.ghostty", "com.googlecode.iterm2",
+    ]
+    static let browsers: Set<String> = [
+        "company.thebrowser.dia", "dev.serafim.fast", "com.apple.Safari", "com.google.Chrome",
+        "company.thebrowser.Browser", "org.mozilla.firefox",
     ]
 
     init(config: DockConfig) {
@@ -72,7 +80,7 @@ final class WindowEngine {
         }
         nc.addObserver(forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main) { [weak self] n in
             guard let app = n.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication else { return }
-            MainActor.assumeIsolated { self?.focusChanged(pid: app.processIdentifier) }
+            MainActor.assumeIsolated { self?.appActivated(app) }
         }
         nc.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.reassert() }
@@ -343,7 +351,8 @@ final class WindowEngine {
         }
         windows[id] = Window(id: id, pid: pid, bundleID: bundleID, element: el, context: context,
                              parkedFrame: parked, lastFocus: parked == nil ? Date() : .distantPast)
-        observeDestroy(el, pid: pid)
+        observeWindow(el, pid: pid, bundleID: bundleID)
+        titles[id] = Self.normalized(AX.title(el))
 
         if context == current || isShared(bundleID) {
             if parked != nil { unpark(id) }
@@ -398,6 +407,44 @@ final class WindowEngine {
         }
     }
 
+    // MARK: - Links landing in parked browser windows
+
+    /// A link from another app activates the browser, which may put the tab in a window other than
+    /// the one it focuses (Dia routes by profile). Hold the focus decision briefly so a parked
+    /// window that gets the new tab can claim it.
+    private func appActivated(_ app: NSRunningApplication) {
+        guard let bundleID = app.bundleIdentifier, Self.browsers.contains(bundleID) else {
+            focusChanged(pid: app.processIdentifier)
+            return
+        }
+        let pid = app.processIdentifier
+        let activatedAt = Date()
+        // Our own switches and ⌘N activate the browser too; those aren't links.
+        let ours = activatedAt < ignoreFocusUntil || awaitingWindow.map { $0.bundleID == bundleID && activatedAt < $0.until } == true
+        linkWatch[pid] = ours ? nil : activatedAt.addingTimeInterval(2.5)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
+            guard let self, self.lastLinkSwitch < activatedAt else { return }
+            self.focusChanged(pid: pid)
+        }
+    }
+
+    private func titleChanged(_ el: AXUIElement, pid: pid_t) {
+        guard let id = AX.windowID(el), let w = windows[id] else { return }
+        let title = Self.normalized(AX.title(el))
+        let before = titles[id]
+        titles[id] = title
+        guard title != before, let until = linkWatch[pid], Date() < until,
+              w.parkedFrame != nil, w.context != current, !isShared(w.bundleID) else { return }
+        linkWatch[pid] = nil
+        lastLinkSwitch = Date()
+        switchTo(w.context, focusing: id)
+    }
+
+    /// Ignores unread counters like "(3) Inbox" so a badge update in a parked tab isn't read as a new tab.
+    private static func normalized(_ title: String) -> String {
+        title.replacingOccurrences(of: #"\(\d+\)\s*|•\s*"#, with: "", options: .regularExpression)
+    }
+
     // MARK: - AX observers
 
     private func observe(_ app: NSRunningApplication) {
@@ -414,10 +461,13 @@ final class WindowEngine {
         observers[pid] = observer
     }
 
-    private func observeDestroy(_ el: AXUIElement, pid: pid_t) {
+    private func observeWindow(_ el: AXUIElement, pid: pid_t, bundleID: String) {
         guard let observer = observers[pid] else { return }
-        AXObserverAddNotification(observer, el, kAXUIElementDestroyedNotification as CFString,
-                                  Unmanaged.passUnretained(self).toOpaque())
+        let refcon = Unmanaged.passUnretained(self).toOpaque()
+        AXObserverAddNotification(observer, el, kAXUIElementDestroyedNotification as CFString, refcon)
+        if Self.browsers.contains(bundleID) {
+            AXObserverAddNotification(observer, el, kAXTitleChangedNotification as CFString, refcon)
+        }
     }
 
     fileprivate func handle(_ notification: String, element: AXUIElement) {
@@ -428,6 +478,8 @@ final class WindowEngine {
             adopt(element, pid: pid)
         case kAXUIElementDestroyedNotification:
             prune(pid)
+        case kAXTitleChangedNotification:
+            titleChanged(element, pid: pid)
         default:
             if NSWorkspace.shared.frontmostApplication?.processIdentifier == pid { focusChanged(pid: pid) }
         }

@@ -44,11 +44,7 @@ The code is our own and short. If AeroSpace code is copied verbatim later, add i
 
 ## Failed / open
 
-- **Links from other apps with Dia.** From Agents, `open https://example.com` put the tab in the *Work* Dia window. Dia's focused window was the Personal one, so the Dock followed to Personal. Dia chose a destination window that wasn't its focused one (likely its profile link routing). Options:
-  - (a) watch title changes of parked browser windows right after a link opens, and follow that window;
-  - (b) make ContextDock the default https handler (Velja/Finicky pattern) and hand each link to the current context's window. macOS asks John to confirm the handler change;
-  - (c) set up Dia's own per-profile link rules.
-  Needs John's call.
+- **Links from other apps with Dia.** In the first run, `open https://example.com` from Agents put the tab in the *Work* Dia window, but Dia focused the Personal one, so the Dock followed to Personal. See the 2026-10-27 link-routing entry below.
 - Hover states and the cascade animation were only seen in one screenshot, not checked frame by frame.
 - Not yet tested:
   - sleep/wake;
@@ -61,3 +57,25 @@ The code is our own and short. If AeroSpace code is copied verbatim later, add i
 
 - A Dia window's title starts with its Dia profile ("Work: …", "Solo: …"). That could later drive automatic assignment, but nothing relies on it yet.
 - The reference video's clock reads 9:41, Apple's marketing time, so it may be a staged mock-up rather than a screen recording. Its focus features (exit countdown, held notifications, site classification) are out of scope per the brief.
+
+## 2026-10-27: Link routing: follow the parked window that gets the new tab
+
+**Decision (John).** When a link from another app lands in a parked browser window, switch to that window's context. The alternative was making ContextDock the default https handler, which we didn't pick.
+
+**How it works:**
+- When a browser activates for a reason we didn't cause (not our own switch, not our ⌘N), ContextDock watches that browser's parked windows for 2.5s.
+- If a parked window's title changes, ContextDock switches to that window's context and focuses it. A browser window's title is its active tab's title, so a new tab changes it.
+- The usual follow-the-focused-window decision waits 0.35s, so the parked window can claim the link first. If it claims later, there are two quick switches but you end up in the right place.
+- Unread counters ("(3) …", "• …") are ignored, so a badge update in a parked tab isn't read as a new tab.
+
+Browsers covered: Dia, Yab, Safari, Chrome, Arc, Firefox.
+
+**Tested live:** three links opened from Agents. Each time Dia put the link in its last-used window (Personal) and focused it, and the Dock went to Personal with that window in front. The Dia mis-route from the first run (tab in one window, focus on another) didn't happen again, so the **parked-window path itself is not yet verified live**. To force it: activate Dia and add a tab to a parked window by AppleScript. That needs a one-time Automation approval.
+
+**Known gaps:**
+- A link that reuses an already-active tab with the same title isn't detected.
+- A parked tab whose page title changes by itself in the 2.5s after you bring the browser forward could cause a false switch.
+
+## 2026-10-27: Signing is pinned
+
+Keychain listed John's two Apple Development certificates in a different order on a later build. That signed the app with the other certificate, and the Accessibility grant stopped applying. `scripts/build-app.sh` now saves the first certificate's SHA-1 in `.signing-identity` (gitignored) and reuses it on every build.
