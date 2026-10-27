@@ -17,11 +17,14 @@ struct DockConfig: Codable {
     var contexts: [DockContext]
     /// Apps whose windows stay visible in every context (music, password manager).
     var shared: [String]
+    /// Apps whose new windows always go to one context, by bundle id (one browser per context).
+    /// Optional so configs from before this key still load.
+    var homes: [String: String]?
 
     static let fallback = DockConfig(
         contexts: [
             DockContext(id: "personal", name: "Personal", symbol: "house.fill", color: "#CF8812",
-                        apps: ["company.thebrowser.dia", "com.apple.MobileSMS", "com.culturedcode.ThingsMac",
+                        apps: ["com.apple.Safari", "com.apple.MobileSMS", "com.culturedcode.ThingsMac",
                                "com.apple.Notes", "com.hnc.Discord"],
                         key: "1"),
             DockContext(id: "work", name: "Work", symbol: "briefcase.fill", color: "#3277BB",
@@ -33,7 +36,8 @@ struct DockConfig: Codable {
                                "com.microsoft.VSCode", "com.apple.Terminal"],
                         key: "3"),
         ],
-        shared: ["com.apple.Music", "com.1password.1password", "com.apple.finder"]
+        shared: ["com.apple.Music", "com.1password.1password", "com.apple.finder"],
+        homes: ["com.apple.Safari": "personal", "company.thebrowser.dia": "work", "dev.serafim.fast": "agents"]
     )
 
     static var url: URL {

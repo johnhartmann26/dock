@@ -314,6 +314,12 @@ final class WindowEngine {
 
     func isShared(_ bundleID: String) -> Bool { config.shared.contains(bundleID) }
 
+    /// The context an app's new windows belong to, if it has one (config `homes`).
+    func home(of bundleID: String) -> String? {
+        guard let id = config.homes?[bundleID], config.contexts.contains(where: { $0.id == id }) else { return nil }
+        return id
+    }
+
     /// The front app's focused window is in native fullscreen (its own Space).
     var frontIsFullScreen: Bool {
         guard let app = NSWorkspace.shared.frontmostApplication, app.processIdentifier != getpid(),
@@ -430,10 +436,13 @@ final class WindowEngine {
 
     /// New windows join the current context, except ones we already knew from before a relaunch.
     @discardableResult
-    private func adopt(_ el: AXUIElement, pid: pid_t) -> Bool {
+    private func adopt(_ el: AXUIElement, pid: pid_t, isNew: Bool = false) -> Bool {
         guard AX.isManageable(el), let id = AX.windowID(el), windows[id] == nil,
               let bundleID = NSRunningApplication(processIdentifier: pid)?.bundleIdentifier else { return false }
-        var context = current
+        // A window you asked for here (Dock click, New Window Here) stays here; otherwise an app with a
+        // home context (Safari → Personal) sends its windows there.
+        let askedHere = awaitingWindow.map { $0.bundleID == bundleID && Date() < $0.until } == true
+        var context = askedHere ? current : (home(of: bundleID) ?? current)
         var parked: CGRect?
         if let s = saved[id], s.bundleID == bundleID, config.contexts.contains(where: { $0.id == s.context }) {
             context = s.context
@@ -445,6 +454,13 @@ final class WindowEngine {
         lastAdoptAt[pid] = Date()
         observeWindow(el, pid: pid, bundleID: bundleID)
         titles[id] = Self.normalized(AX.title(el))
+
+        if isNew, parked == nil, context != current, !isShared(bundleID) {
+            // e.g. Velja opened a personal link in a new Safari window while you were in Work.
+            persist()
+            switchTo(context, focusing: id, reason: "home \(bundleID) \(id)")
+            return true
+        }
 
         if context == current || isShared(bundleID) {
             if parked != nil { unpark(id) }
@@ -606,7 +622,7 @@ final class WindowEngine {
         AXUIElementGetPid(element, &pid)
         switch notification {
         case kAXWindowCreatedNotification:
-            adopt(element, pid: pid)
+            adopt(element, pid: pid, isNew: true)
         case kAXUIElementDestroyedNotification:
             prune(pid)
         case kAXTitleChangedNotification:

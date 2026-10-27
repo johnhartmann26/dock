@@ -178,3 +178,17 @@ A horizontal two-finger swipe over the Dock bar moves one context per gesture. F
 Tested with synthetic trackpad-phase scroll events: past the last context it did nothing, and the reverse swipe gave `agents -> work: swipe`. John confirmed the direction feels right on his trackpad.
 
 **Steam:** John reported Steam misbehaving. ContextDock manages none of Steam's windows and has parked none. Steam draws its UI in "Steam Helper" windows, which were all ordered out by Steam itself. Treated as a Steam issue.
+
+## 2026-10-27: One browser per context; Velja routes links
+
+**John's plan:** Dia is the Work browser, Yab the Agents browser and Safari the Personal browser. Velja (installed, running, the default https handler) picks the browser for each link. ContextDock doesn't integrate with Velja; it only has to send each browser's windows to the right context.
+
+**`homes` (new config key, optional so older configs load):** bundle id → context. A *new* window (AX window-created) from a home app joins its home context. If that isn't the current one, the Dock switches there and focuses the window. A window you asked for in the current context (Dock click or New Window Here, via `awaitingWindow`) stays where you are. Windows found by a scan, not created, get their home context without a switch. Existing windows keep their saved context.
+
+John's config: Personal's Dock has Safari where Dia was. Homes are Safari → personal, Dia → work, Yab → agents. The defaults match.
+
+**Tested (links opened straight into each browser, bypassing Velja):**
+- From Work, a link in Safari landed as a tab in the existing, parked Personal Safari window: `work -> personal: link-landed com.apple.Safari 745928`.
+- From Personal, a link in Yab opened a new window: `personal -> agents: home dev.serafim.fast 746109`.
+
+With one browser per context, the Dia link-routing problem from earlier (a tab landing in another context's Dia window) mostly goes away.

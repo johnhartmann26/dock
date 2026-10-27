@@ -40,6 +40,8 @@ On first launch, approve **ContextDock** in System Settings > Privacy & Security
 
 **What follows focus:** if a window from another context comes forward, the Dock switches to that context. That covers ⌘-Tab, clicking the native Dock, notifications, and links that land in an existing window.
 
+**Home apps (one browser per context):** `homes` in config.json maps an app to a context, for example Safari → Personal, Dia → Work, Yab → Agents. A new window from a home app goes to its home context and the Dock switches there, so a link a router like Velja opens in Safari takes you to Personal from anywhere. Windows you open on purpose (a Dock click or New Window Here) stay where you are.
+
 **Shared apps:** windows of the apps in `shared` stay visible in every context (Music, 1Password and Finder by default).
 
 **Editing contexts:** menu bar > Edit Dock Contents… opens `~/Library/Application Support/ContextDock/config.json` (contexts, Dock apps by bundle id, colours, keys, `shared`). Relaunch to apply.
