@@ -314,6 +314,13 @@ final class WindowEngine {
 
     func isShared(_ bundleID: String) -> Bool { config.shared.contains(bundleID) }
 
+    /// The front app's focused window is in native fullscreen (its own Space).
+    var frontIsFullScreen: Bool {
+        guard let app = NSWorkspace.shared.frontmostApplication, app.processIdentifier != getpid(),
+              let el = AX.focusedWindow(of: AX.app(app.processIdentifier)) else { return false }
+        return AX.isFullScreen(el)
+    }
+
     private var newWindowApps: Set<String> { Self.fallbackNewWindowApps }
 
     // MARK: - Parking
@@ -490,7 +497,9 @@ final class WindowEngine {
             return
         }
         if w.context != current && !isShared(w.bundleID) {
-            if Date().timeIntervalSince(lastSpaceChange) < 1.0 {
+            // Only a *parked* window is macOS's fallback pick; a visible one (say, a window that just
+            // left fullscreen) is the one you're looking at, so that still follows.
+            if Date().timeIntervalSince(lastSpaceChange) < 1.0, w.parkedFrame != nil {
                 // macOS picked this window because the Space changed. Stay in this context, and take
                 // keyboard focus off the parked window without focusing another window, which could
                 // pull you back to a different Space mid-swipe.
@@ -531,6 +540,8 @@ final class WindowEngine {
     private func appActivated(_ app: NSRunningApplication) {
         let pid = app.processIdentifier
         let activatedAt = Date()
+        // Windows on a Space we couldn't see at launch show up once their app comes forward.
+        if manages(app) { scan(app) }
         guard let bundleID = app.bundleIdentifier, Self.browsers.contains(bundleID) else {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
                 guard let self, (self.lastAdoptAt[pid] ?? .distantPast) < activatedAt else { return }

@@ -37,6 +37,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         panel = DockPanel(state: state)
         panel.orderFrontRegardless()
+        // Like the native Dock, stay out of the way of fullscreen windows (a fullscreen video, say).
+        let ws = NSWorkspace.shared.notificationCenter
+        for name in [NSWorkspace.activeSpaceDidChangeNotification, NSWorkspace.didActivateApplicationNotification] {
+            ws.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                // Entering fullscreen animates for most of a second; check early and again after.
+                for delay in [0.3, 1.1] {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + delay) { self?.updatePanelVisibility() }
+                }
+            }
+        }
         // Scroll events land on the panel only over the visible bar (the rest is click-through).
         swipeMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
             guard let self, event.window === self.panel else { return event }
@@ -69,6 +79,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let id = ctx.id
             hotKeys.register(code, modifiers: [.control, .option]) { [weak self] in self?.engine.switchTo(id, reason: "hotkey") }
             hotKeys.register(code, modifiers: [.control, .option, .shift]) { [weak self] in self?.engine.moveFocusedWindow(to: id) }
+        }
+    }
+
+    private func updatePanelVisibility() {
+        guard AX.trusted, engine != nil else { return }
+        if engine.frontIsFullScreen {
+            panel.orderOut(nil)
+        } else if !panel.isVisible {
+            panel.orderFrontRegardless()
         }
     }
 
