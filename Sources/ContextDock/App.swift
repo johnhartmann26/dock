@@ -41,8 +41,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let ws = NSWorkspace.shared.notificationCenter
         for name in [NSWorkspace.activeSpaceDidChangeNotification, NSWorkspace.didActivateApplicationNotification] {
             ws.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
-                // Entering fullscreen animates for most of a second; check early and again after.
-                for delay in [0.3, 1.1] {
+                // Check at once (swiping back to the desktop), and again as fullscreen animations finish.
+                for delay in [0.0, 0.3, 1.1] {
                     DispatchQueue.main.asyncAfter(deadline: .now() + delay) { self?.updatePanelVisibility() }
                 }
             }

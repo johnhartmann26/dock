@@ -91,6 +91,12 @@ enum AX {
         return !(info?.isEmpty ?? true)
     }
 
+    /// On the Space that's showing right now.
+    static func isOnScreen(_ id: CGWindowID) -> Bool {
+        let info = CGWindowListCopyWindowInfo([.optionIncludingWindow], id) as? [[String: Any]]
+        return info?.first?[kCGWindowIsOnscreen as String] as? Bool ?? false
+    }
+
     /// The window server layer (0 = normal windows; floating panels and overlays sit higher).
     static func windowLevel(_ id: CGWindowID) -> Int? {
         let info = CGWindowListCopyWindowInfo([.optionIncludingWindow], id) as? [[String: Any]]
