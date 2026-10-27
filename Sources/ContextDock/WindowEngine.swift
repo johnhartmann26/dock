@@ -289,7 +289,18 @@ final class WindowEngine {
     // MARK: - Assignment
 
     func move(_ id: CGWindowID, to context: String) {
-        guard var w = windows[id] else { return }
+        guard config.contexts.contains(where: { $0.id == context }) else { return }
+        guard var w = windows[id] else {
+            // Not visible to us right now (on another Space): change its saved context, so it lands
+            // there when it shows up.
+            if var s = saved[id] {
+                s.context = context
+                saved[id] = s
+                note("moved saved window \(id) to \(context) (applies when it's next seen)")
+                persist()
+            }
+            return
+        }
         w.context = context
         windows[id] = w
         if context == current { unpark(id) } else if !isShared(w.bundleID) { park(id) }
