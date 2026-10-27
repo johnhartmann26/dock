@@ -53,6 +53,7 @@ final class WindowEngine {
     private var demoActive = false
     /// When each app last got a new window, so an activation that opens one doesn't pull you away.
     private var lastAdoptAt: [pid_t: Date] = [:]
+    private let startedAt = Date()
     /// Leaving or entering a fullscreen Space makes macOS focus whatever window that app has on the
     /// new Space, often a parked one from another context. That isn't the user asking to switch.
     private var lastSpaceChange = Date.distantPast
@@ -454,9 +455,12 @@ final class WindowEngine {
     private func appLaunched(_ app: NSRunningApplication) {
         guard manages(app) else { return }
         observe(app)
-        // First windows can take a moment; window-created notifications cover later ones.
+        // First windows can take a moment; window-created notifications cover later ones. They count
+        // as new (so a link that launched Chrome takes you to Work), except in ContextDock's first 30s,
+        // when apps restoring windows at login shouldn't bounce you between contexts.
+        let fresh = Date().timeIntervalSince(startedAt) > 30
         for delay in [0.4, 1.2, 3.0] {
-            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in self?.scan(app) }
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in self?.scan(app, asNew: fresh) }
         }
     }
 
@@ -474,9 +478,9 @@ final class WindowEngine {
         }
     }
 
-    private func scan(_ app: NSRunningApplication) {
+    private func scan(_ app: NSRunningApplication, asNew: Bool = false) {
         let pid = app.processIdentifier
-        for el in AX.windows(of: AX.app(pid)) { adopt(el, pid: pid) }
+        for el in AX.windows(of: AX.app(pid)) { adopt(el, pid: pid, isNew: asNew) }
         prune(pid)
     }
 

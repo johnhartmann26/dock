@@ -124,8 +124,7 @@ private struct ModeButton: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: 7) {
-                Image(systemName: context.symbol)
-                    .font(.system(size: 14, weight: .semibold))
+                ContextSymbol(name: context.symbol, size: 14)
                 if selected {
                     Text(context.name)
                         .font(.system(size: 14.5, weight: .semibold))

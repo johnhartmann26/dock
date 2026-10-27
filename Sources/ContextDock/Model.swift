@@ -5,7 +5,7 @@ import SwiftUI
 struct DockContext: Codable, Identifiable, Hashable {
     var id: String
     var name: String
-    var symbol: String
+    var symbol: String         // an SF Symbol name, or "robot" (drawn in Glyphs.swift)
     var color: String          // hex, e.g. "#2F6BD8"
     var apps: [String]         // bundle identifiers, in Dock order
     var key: String            // ⌃⌥ + key switches to this context
@@ -24,20 +24,20 @@ struct DockConfig: Codable {
     static let fallback = DockConfig(
         contexts: [
             DockContext(id: "personal", name: "Personal", symbol: "house.fill", color: "#CF8812",
-                        apps: ["com.apple.Safari", "com.apple.MobileSMS", "com.culturedcode.ThingsMac",
+                        apps: ["company.thebrowser.dia", "com.apple.MobileSMS", "com.culturedcode.ThingsMac",
                                "com.apple.Notes", "com.hnc.Discord"],
                         key: "1"),
             DockContext(id: "work", name: "Work", symbol: "briefcase.fill", color: "#3277BB",
-                        apps: ["company.thebrowser.dia", "com.mimestream.Mimestream", "com.tinyspeck.slackmacgap",
+                        apps: ["com.google.Chrome", "com.mimestream.Mimestream", "com.tinyspeck.slackmacgap",
                                "com.granola.app", "com.flexibits.fantastical2.mac"],
                         key: "2"),
-            DockContext(id: "agents", name: "Agents", symbol: "sparkles", color: "#7B5CC4",
-                        apps: ["com.anthropic.claudefordesktop", "com.openai.codex", "dev.serafim.fast",
+            DockContext(id: "agents", name: "Agents", symbol: "robot", color: "#7B5CC4",
+                        apps: ["dev.serafim.fast", "com.anthropic.claudefordesktop", "com.openai.codex",
                                "com.microsoft.VSCode", "com.apple.Terminal"],
                         key: "3"),
         ],
         shared: ["com.apple.Music", "com.1password.1password", "com.apple.finder"],
-        homes: ["com.apple.Safari": "personal", "company.thebrowser.dia": "work", "dev.serafim.fast": "agents"]
+        homes: ["com.google.Chrome": "work", "company.thebrowser.dia": "personal", "dev.serafim.fast": "agents"]
     )
 
     static var url: URL {

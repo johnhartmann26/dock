@@ -146,8 +146,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func updateStatusItem() {
         guard let button = statusItem.button, let ctx = state.currentContext else { return }
-        let image = NSImage(systemSymbolName: ctx.symbol, accessibilityDescription: ctx.name)?
-            .withSymbolConfiguration(.init(pointSize: 12, weight: .semibold))
+        let image = Glyph.image(ctx.symbol, pointSize: 12)
         image?.isTemplate = true
         button.image = image
         button.imagePosition = .imageLeading

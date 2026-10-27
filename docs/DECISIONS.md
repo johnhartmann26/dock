@@ -225,3 +225,13 @@ With one browser per context, the Dia link-routing problem from earlier (a tab l
 **Follow-up 4: the hide logic was the problem, so it's gone.** The log again had the Dock hidden and shown on time, and the 0.3s check never fired. But the window server reported the panel *not on screen* while John was in the fullscreen video, including right after a restart, before anything had hidden it. So macOS already keeps a `.canJoinAllSpaces` panel without `.fullScreenAuxiliary` off fullscreen Spaces. The earlier conclusion, drawn from swipes at 22:02:59, was wrong; those swipes were on the desktop. All fullscreen hide/show logic is removed, and the Dock is a plain all-Spaces window that macOS shows as soon as a desktop Space is. `contextdock://panel/hide|show` remains for debugging.
 
 John confirmed: after a long fullscreen video the Dock shows right away on returning to the desktop, and it isn't over the video.
+
+## 2026-10-27: Chrome for Work, Dia for Personal; robot symbol for Agents
+
+**Browsers (John):** Chrome is Work's browser, Dia Personal's and Yab Agents'; Safari is out. Velja routes links. Dock firsts: Chrome in Work, Dia in Personal, Yab in Agents. Homes: Chrome → work, Dia → personal, Yab → agents. Existing windows keep their contexts: the Dia "CSM Workspace" window stays in Work and the Safari window in Personal until John moves or closes them.
+
+**Launch gap fixed:** the first windows of an app that just launched are found by a scan, not a window-created event, so a link that *launched* a home browser wouldn't have moved you to its context. Scans in the first seconds after an app launches now count as new windows, except in ContextDock's first 30s, so apps restoring windows at login don't bounce you between contexts.
+
+**Tested:** from Personal, a link opened in Chrome went to Work: `personal -> work: link-landed com.google.Chrome`. The test tab landed in the Chrome window John was using to sign in with a passkey; he was told to close it. No more test links will be opened in his Chrome.
+
+**Agents symbol:** SF Symbols has no robot on macOS 26 (`robot` and `robot.fill` don't exist). `Glyphs.swift` draws one on a 16×16 grid: a rounded head, visor eyes, a small smile and an antenna. `symbol: "robot"` uses it in the Dock and the menu bar; any other value is an SF Symbol name. A round-eyed variant was drawn too, but not kept.
