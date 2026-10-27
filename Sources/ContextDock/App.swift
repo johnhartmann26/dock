@@ -22,6 +22,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var hotKeys = HotKeys()
     private var signalSources: [DispatchSourceSignal] = []
     private var trustTimer: Timer?
+    private var swipeMonitor: Any?
+    private var swipeDistance: CGFloat = 0
+    private var swipeUsed = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let config = DockConfig.load()
@@ -34,6 +37,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         panel = DockPanel(state: state)
         panel.orderFrontRegardless()
+        // Scroll events land on the panel only over the visible bar (the rest is click-through).
+        swipeMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
+            guard let self, event.window === self.panel else { return event }
+            self.handleSwipe(event)
+            return nil
+        }
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         installSignalHandlers()
 
@@ -61,6 +70,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             hotKeys.register(code, modifiers: [.control, .option]) { [weak self] in self?.engine.switchTo(id, reason: "hotkey") }
             hotKeys.register(code, modifiers: [.control, .option, .shift]) { [weak self] in self?.engine.moveFocusedWindow(to: id) }
         }
+    }
+
+    /// Two-finger swipe on the Dock: one context per swipe, like swiping between desktops.
+    /// Fingers moving left go to the context on the right. Stops at the ends.
+    private func handleSwipe(_ event: NSEvent) {
+        // Trackpad gestures only; momentum after the fingers lift is ignored.
+        guard event.hasPreciseScrollingDeltas, event.momentumPhase.isEmpty else { return }
+        if event.phase.contains(.began) {
+            swipeDistance = 0
+            swipeUsed = false
+        }
+        guard !swipeUsed, abs(event.scrollingDeltaX) > abs(event.scrollingDeltaY) else { return }
+        // Normalise to finger movement whatever the natural-scrolling setting.
+        swipeDistance += event.isDirectionInvertedFromDevice ? event.scrollingDeltaX : -event.scrollingDeltaX
+        guard abs(swipeDistance) > 36 else { return }
+        swipeUsed = true
+        let ids = engine.config.contexts.map(\.id)
+        guard let i = ids.firstIndex(of: engine.current) else { return }
+        let next = swipeDistance < 0 ? i + 1 : i - 1
+        if ids.indices.contains(next) { engine.switchTo(ids[next], reason: "swipe") }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
