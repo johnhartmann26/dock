@@ -175,6 +175,6 @@ Checked with window-only captures of the gallery (`screencapture -l` in a loop).
 
 A horizontal two-finger swipe over the Dock bar moves one context per gesture. Fingers moving left go to the context on the right (Personal → Work → Agents), matching swiping between desktops. The direction is normalised for the natural-scrolling setting with `isDirectionInvertedFromDevice`. It needs 36pt of travel, ignores momentum and mostly-vertical scrolls, and doesn't wrap at the ends. Only scrolls over the visible bar reach it, because the rest of the panel is click-through.
 
-Tested with synthetic trackpad-phase scroll events: past the last context it did nothing, and the reverse swipe gave `agents -> work: swipe`. The direction on John's real trackpad is for John to confirm.
+Tested with synthetic trackpad-phase scroll events: past the last context it did nothing, and the reverse swipe gave `agents -> work: swipe`. John confirmed the direction feels right on his trackpad.
 
 **Steam:** John reported Steam misbehaving. ContextDock manages none of Steam's windows and has parked none. Steam draws its UI in "Steam Helper" windows, which were all ordered out by Steam itself. Treated as a Steam issue.
