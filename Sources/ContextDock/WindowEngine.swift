@@ -357,16 +357,6 @@ final class WindowEngine {
         return id
     }
 
-    /// A fullscreen window is what you're looking at: the front app's focused window is in native
-    /// fullscreen *and* on screen. After swiping back to the desktop the app often stays in front
-    /// with its fullscreen window still focused, on a Space that's no longer showing.
-    var frontFullScreenWindow: CGWindowID? {
-        guard let app = NSWorkspace.shared.frontmostApplication, app.processIdentifier != getpid(),
-              let el = AX.focusedWindow(of: AX.app(app.processIdentifier)), AX.isFullScreen(el),
-              let id = AX.windowID(el), AX.isOnScreen(id) else { return nil }
-        return id
-    }
-
     private var newWindowApps: Set<String> { Self.fallbackNewWindowApps }
 
     // MARK: - Parking

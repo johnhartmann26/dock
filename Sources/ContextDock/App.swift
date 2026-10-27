@@ -26,11 +26,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Held for the app's lifetime: with the Dock hidden (a long fullscreen video) ContextDock has no
     /// visible window, and App Nap would then delay the events and timers it reacts to.
     private var noNap: NSObjectProtocol?
-    private var panelOverride: String?
-    /// The fullscreen window the Dock is hidden for, and a light poll that brings the Dock back as
-    /// soon as that window is off screen (so a missed or early Space notification can't strand it).
-    private var hiddenFor: CGWindowID?
-    private var hiddenPoll: Timer?
     private var swipeDistance: CGFloat = 0
     private var swipeUsed = false
 
@@ -47,16 +42,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         panel = DockPanel(state: state)
         panel.orderFrontRegardless()
-        // Like the native Dock, stay out of the way of fullscreen windows (a fullscreen video, say).
-        let ws = NSWorkspace.shared.notificationCenter
-        for name in [NSWorkspace.activeSpaceDidChangeNotification, NSWorkspace.didActivateApplicationNotification] {
-            ws.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
-                // Check at once (swiping back to the desktop), and again as fullscreen animations finish.
-                for delay in [0.0, 0.3, 1.1] {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + delay) { self?.updatePanelVisibility() }
-                }
-            }
-        }
         // Scroll events land on the panel only over the visible bar (the rest is click-through).
         swipeMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
             guard let self, event.window === self.panel else { return event }
@@ -89,44 +74,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let id = ctx.id
             hotKeys.register(code, modifiers: [.control, .option]) { [weak self] in self?.engine.switchTo(id, reason: "hotkey") }
             hotKeys.register(code, modifiers: [.control, .option, .shift]) { [weak self] in self?.engine.moveFocusedWindow(to: id) }
-        }
-    }
-
-    private func updatePanelVisibility() {
-        guard AX.trusted, engine != nil, panelOverride == nil else { return }
-        if let fs = engine.frontFullScreenWindow {
-            guard hiddenFor != fs else { return }
-            hiddenFor = fs
-            panel.setHidden(true)
-            engine.note("Dock hidden: fullscreen window \(fs) in front")
-            hiddenPoll?.invalidate()
-            hiddenPoll = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
-                MainActor.assumeIsolated { self?.checkHiddenFor() }
-            }
-        } else if hiddenFor != nil {
-            showPanel("no fullscreen window in front")
-        }
-    }
-
-    private func checkHiddenFor() {
-        guard let fs = hiddenFor else { hiddenPoll?.invalidate(); return }
-        if !AX.windowExists(fs) || !AX.isOnScreen(fs) { showPanel("fullscreen window \(fs) off screen") }
-    }
-
-    private func showPanel(_ why: String) {
-        hiddenPoll?.invalidate()
-        hiddenPoll = nil
-        hiddenFor = nil
-        panel.setHidden(false)
-        engine.note("Dock shown: \(why)")
-        // Record whether it really is on screen, in case this ever needs debugging again.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
-            guard let self, self.hiddenFor == nil else { return }
-            let visible = AX.isOnScreen(CGWindowID(self.panel.windowNumber))
-            if !visible {
-                self.panel.orderFrontRegardless()
-                self.engine.note("Dock not on screen 0.3s after showing; ordered it front again")
-            }
         }
     }
 
@@ -168,9 +115,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             case "dump": engine.dump()
             case "demo": arg == "start" ? engine.demoStart() : engine.demoEnd()
             case "login": setOpenAtLogin(arg == "on")
-            case "panel":   // debug: show / hide / auto
-                panelOverride = arg == "auto" ? nil : arg
-                if arg == "show" { panel.setHidden(false) } else if arg == "hide" { panel.setHidden(true) } else { updatePanelVisibility() }
+            case "panel": panel.setHidden(arg == "hide")   // debug: show / hide
             default: break
             }
         }
@@ -311,8 +256,8 @@ final class DockPanel: NSPanel {
         }
     }
 
-    /// Hidden means transparent and click-through. The window itself stays ordered in on every Space:
-    /// ordering it out and back in during a Space swipe left it showing late, or not at all.
+    /// Hidden means transparent and click-through (debug only). macOS already keeps this panel off
+    /// fullscreen Spaces, so nothing hides it in normal use.
     func setHidden(_ hidden: Bool) {
         ignoresMouseEvents = hidden
         NSAnimationContext.runAnimationGroup { ctx in
