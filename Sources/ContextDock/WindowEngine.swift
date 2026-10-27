@@ -158,7 +158,7 @@ final class WindowEngine {
     /// The last few switches (and wake/display passes) and why, for `contextdock://dump`.
     private var recentSwitches: [String] = []
 
-    private func note(_ event: String) {
+    func note(_ event: String) {
         recentSwitches.append("\(Date().formatted(.iso8601.time(includingFractionalSeconds: true))) \(event)")
         recentSwitches = Array(recentSwitches.suffix(20))
     }
@@ -360,11 +360,11 @@ final class WindowEngine {
     /// A fullscreen window is what you're looking at: the front app's focused window is in native
     /// fullscreen *and* on screen. After swiping back to the desktop the app often stays in front
     /// with its fullscreen window still focused, on a Space that's no longer showing.
-    var frontIsFullScreen: Bool {
+    var frontFullScreenWindow: CGWindowID? {
         guard let app = NSWorkspace.shared.frontmostApplication, app.processIdentifier != getpid(),
               let el = AX.focusedWindow(of: AX.app(app.processIdentifier)), AX.isFullScreen(el),
-              let id = AX.windowID(el) else { return false }
-        return AX.isOnScreen(id)
+              let id = AX.windowID(el), AX.isOnScreen(id) else { return nil }
+        return id
     }
 
     private var newWindowApps: Set<String> { Self.fallbackNewWindowApps }

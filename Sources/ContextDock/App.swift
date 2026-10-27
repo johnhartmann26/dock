@@ -26,6 +26,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Held for the app's lifetime: with the Dock hidden (a long fullscreen video) ContextDock has no
     /// visible window, and App Nap would then delay the events and timers it reacts to.
     private var noNap: NSObjectProtocol?
+    private var panelOverride: String?
+    /// The fullscreen window the Dock is hidden for, and a light poll that brings the Dock back as
+    /// soon as that window is off screen (so a missed or early Space notification can't strand it).
+    private var hiddenFor: CGWindowID?
+    private var hiddenPoll: Timer?
     private var swipeDistance: CGFloat = 0
     private var swipeUsed = false
 
@@ -88,12 +93,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func updatePanelVisibility() {
-        guard AX.trusted, engine != nil else { return }
-        if engine.frontIsFullScreen {
+        guard AX.trusted, engine != nil, panelOverride == nil else { return }
+        if let fs = engine.frontFullScreenWindow {
+            guard hiddenFor != fs else { return }
+            hiddenFor = fs
             panel.orderOut(nil)
-        } else if !panel.isVisible {
-            panel.orderFrontRegardless()
+            engine.note("Dock hidden: fullscreen window \(fs) in front")
+            hiddenPoll?.invalidate()
+            hiddenPoll = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+                MainActor.assumeIsolated { self?.checkHiddenFor() }
+            }
+        } else if hiddenFor != nil || !panel.isVisible {
+            showPanel("no fullscreen window in front")
         }
+    }
+
+    private func checkHiddenFor() {
+        guard let fs = hiddenFor else { hiddenPoll?.invalidate(); return }
+        if !AX.windowExists(fs) || !AX.isOnScreen(fs) { showPanel("fullscreen window \(fs) off screen") }
+    }
+
+    private func showPanel(_ why: String) {
+        hiddenPoll?.invalidate()
+        hiddenPoll = nil
+        hiddenFor = nil
+        panel.orderFrontRegardless()
+        engine.note("Dock shown: \(why)")
     }
 
     /// Two-finger swipe on the Dock: one context per swipe, like swiping between desktops.
@@ -134,6 +159,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             case "dump": engine.dump()
             case "demo": arg == "start" ? engine.demoStart() : engine.demoEnd()
             case "login": setOpenAtLogin(arg == "on")
+            case "panel":   // debug: show / hide / auto
+                panelOverride = arg == "auto" ? nil : arg
+                if arg == "show" { panel.orderFrontRegardless() } else if arg == "hide" { panel.orderOut(nil) } else { updatePanelVisibility() }
             default: break
             }
         }

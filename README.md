@@ -68,6 +68,7 @@ Window assignments and each parked window's exact frame are written to `~/Librar
 - **Mission Control** shows parked windows tiny in a corner.
 - **Native fullscreen windows** aren't moved; they keep their own Space. Using one (a fullscreen video, say) never switches context, and the Dock hides while it's showing. Exit fullscreen with it in front and you're taken to its context.
 - **Floating windows** (Granola's call indicator and notepad, ChatGPT's bar, picture-in-picture) aren't managed, so they show in every context. That covers anything above normal window level or smaller than 80×80.
+- **Safari and fullscreen video:** leaving a fullscreen Safari video's Space makes Safari pull its parked window on screen. ContextDock puts it straight back, but it can flicker for a frame.
 - **A faint sliver at the bottom right:** macOS keeps 1px × ~32px of each parked window, plus its shadow, on screen.
 - **Sleep and displays:** display off, lock and unlock were tested and held. Real system sleep and plugging/unplugging a display haven't been tested yet (the code re-pins parked windows on both).
 - **Restarting the Mac:** after a restart, windows get new ids, so they all start in the current context. Persistence across a restart is out of scope for v1.
