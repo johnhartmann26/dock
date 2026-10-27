@@ -29,6 +29,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var swipeDistance: CGFloat = 0
     private var swipeUsed = false
     private let threeFinger = ThreeFingerSwipe()
+    private var lastStep: (reason: String, at: Date)?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         noNap = ProcessInfo.processInfo.beginActivity(options: [.userInitiatedAllowingIdleSystemSleep, .latencyCritical],
@@ -99,7 +100,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// One context left or right. Fingers moving left (-1) go to the context on the right; stops at the ends.
+    /// A three-finger swipe over the Dock also arrives as the Dock's scroll, so once either kind of
+    /// swipe steps, the other is ignored for a moment: one gesture, one step.
     private func step(fingers: Int, reason: String) {
+        if let last = lastStep, last.reason != reason, Date().timeIntervalSince(last.at) < 0.6 { return }
+        lastStep = (reason, Date())
         let ids = engine.config.contexts.map(\.id)
         guard let i = ids.firstIndex(of: engine.current) else { return }
         let next = fingers < 0 ? i + 1 : i - 1
