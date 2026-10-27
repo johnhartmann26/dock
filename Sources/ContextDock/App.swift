@@ -97,13 +97,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let fs = engine.frontFullScreenWindow {
             guard hiddenFor != fs else { return }
             hiddenFor = fs
-            panel.orderOut(nil)
+            panel.setHidden(true)
             engine.note("Dock hidden: fullscreen window \(fs) in front")
             hiddenPoll?.invalidate()
             hiddenPoll = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
                 MainActor.assumeIsolated { self?.checkHiddenFor() }
             }
-        } else if hiddenFor != nil || !panel.isVisible {
+        } else if hiddenFor != nil {
             showPanel("no fullscreen window in front")
         }
     }
@@ -117,8 +117,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hiddenPoll?.invalidate()
         hiddenPoll = nil
         hiddenFor = nil
-        panel.orderFrontRegardless()
+        panel.setHidden(false)
         engine.note("Dock shown: \(why)")
+        // Record whether it really is on screen, in case this ever needs debugging again.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+            guard let self, self.hiddenFor == nil else { return }
+            let visible = AX.isOnScreen(CGWindowID(self.panel.windowNumber))
+            if !visible {
+                self.panel.orderFrontRegardless()
+                self.engine.note("Dock not on screen 0.3s after showing; ordered it front again")
+            }
+        }
     }
 
     /// Two-finger swipe on the Dock: one context per swipe, like swiping between desktops.
@@ -161,7 +170,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             case "login": setOpenAtLogin(arg == "on")
             case "panel":   // debug: show / hide / auto
                 panelOverride = arg == "auto" ? nil : arg
-                if arg == "show" { panel.orderFrontRegardless() } else if arg == "hide" { panel.orderOut(nil) } else { updatePanelVisibility() }
+                if arg == "show" { panel.setHidden(false) } else if arg == "hide" { panel.setHidden(true) } else { updatePanelVisibility() }
             default: break
             }
         }
@@ -299,6 +308,16 @@ final class DockPanel: NSPanel {
         place()
         NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.place() }
+        }
+    }
+
+    /// Hidden means transparent and click-through. The window itself stays ordered in on every Space:
+    /// ordering it out and back in during a Space swipe left it showing late, or not at all.
+    func setHidden(_ hidden: Bool) {
+        ignoresMouseEvents = hidden
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = hidden ? 0.08 : 0.16
+            animator().alphaValue = hidden ? 0 : 1
         }
     }
 
