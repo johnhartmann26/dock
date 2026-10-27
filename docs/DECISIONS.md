@@ -296,3 +296,9 @@ John: a dozen three-finger swipes, every one switched.
 The menu bar and the Dock stay live on top. Snapshots exist only in memory during the transition. Without permission, ContextDock asks once and switches instantly. With Reduce Motion on, or if the second snapshot fails, the old picture fades over the live windows instead. The content filter is built at launch and after display changes, because the first lookup costs about 200ms. `Wipe.swift` is removed. Screen Recording was granted to the pinned Apple Development signature.
 
 **Measured:** snapshot 37–93ms, swap plus second snapshot 122–139ms, slide 288–293ms, so about 0.45–0.5s from click to settled.
+
+**Slide fix after John: "it really doesn't work".** A 2.5s screen recording, made with John's OK and deleted afterwards, showed two problems:
+1. **A flash of the new context.** The new screen appeared for a frame (0.73s), then the old snapshot (0.77s), and only then the slide. The overlay wasn't on screen yet when the windows started moving. Now ContextDock calls `displayIfNeeded()` and `CATransaction.flush()` and waits 34ms (two frames) before swapping.
+2. **Only the old picture moved.** The new layer's start and end positions were set in the same transaction, so it never animated. Now both layers get explicit `position.x` animations: old out, new in, by one screen width. Implicit actions are disabled, the duration is 0.3s, and the curve is (0.32, 0, 0.18, 1).
+
+Re-recorded: no flash, and both screens slide together over about 0.3s (frames 1.00–1.30s). Measured: snapshot 29ms, swap plus second snapshot 162ms, slide 312ms.

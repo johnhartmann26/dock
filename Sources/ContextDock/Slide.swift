@@ -18,7 +18,7 @@ final class Slide {
     private var filter: SCContentFilter?
     private var display: SCDisplay?
     private var askedForPermission = false
-    private let slideTime: CFTimeInterval = 0.28
+    private let slideTime: CFTimeInterval = 0.3
 
     var permitted: Bool { CGPreflightScreenCaptureAccess() }
 
@@ -51,6 +51,11 @@ final class Slide {
             let new = layer(nil, in: root.bounds)
             root.sublayers = [new, old]
             w.order(.below, relativeTo: dock.windowNumber)
+            // The overlay has to be on screen before the windows move, or the new context flashes
+            // for a frame first. Push it to the window server and give it two frames.
+            w.displayIfNeeded()
+            CATransaction.flush()
+            try? await Task.sleep(for: .milliseconds(34))
 
             swap()
             // Let apps finish redrawing after their windows moved before taking the "after" picture.
@@ -60,30 +65,45 @@ final class Slide {
 
             let width = root.bounds.width
             let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
-            CATransaction.begin()
-            CATransaction.setAnimationDuration(reduceMotion ? 0.18 : slideTime)
-            CATransaction.setAnimationTimingFunction(CAMediaTimingFunction(controlPoints: 0.25, 0.85, 0.25, 1))
-            CATransaction.setCompletionBlock { [weak self] in
-                MainActor.assumeIsolated {
-                    w.orderOut(nil)
-                    root.sublayers = nil
-                    self?.running = false
-                    let ms = { (a: Date, b: Date) in Int(b.timeIntervalSince(a) * 1000) }
-                    self?.log("slide: snapshot \(ms(began, captured))ms, swap+snapshot \(ms(captured, swapped))ms, slide \(ms(swapped, Date()))ms")
-                }
+            let duration: CFTimeInterval = reduceMotion ? 0.18 : slideTime
+            let finish = { [weak self] in
+                w.orderOut(nil)
+                root.sublayers = nil
+                self?.running = false
+                let ms = { (a: Date, b: Date) in Int(b.timeIntervalSince(a) * 1000) }
+                self?.log("slide: snapshot \(ms(began, captured))ms, swap+snapshot \(ms(captured, swapped))ms, slide \(ms(swapped, Date()))ms")
             }
+
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            new.contents = after
+            CATransaction.commit()
+
+            CATransaction.begin()
+            CATransaction.setCompletionBlock { MainActor.assumeIsolated { finish() } }
             if reduceMotion || after == nil {
                 // Fade the old picture away over the live windows.
+                let fade = CABasicAnimation(keyPath: "opacity")
+                fade.fromValue = 1
+                fade.toValue = 0
+                fade.duration = duration
                 old.opacity = 0
+                old.add(fade, forKey: "fade")
             } else {
-                // Start the new picture just off the side it comes from, then slide both.
-                CATransaction.begin()
-                CATransaction.setDisableActions(true)
-                new.contents = after
-                new.position.x += CGFloat(direction) * width
-                CATransaction.commit()
-                old.position.x -= CGFloat(direction) * width
-                new.position.x -= CGFloat(direction) * width
+                // Like Spaces: both pictures move one screen width, the old one out, the new one in
+                // from the side you're heading toward.
+                let shift = CGFloat(direction) * width
+                let curve = CAMediaTimingFunction(controlPoints: 0.32, 0.0, 0.18, 1.0)
+                for (l, from, to) in [(old, root.bounds.midX, root.bounds.midX - shift),
+                                      (new, root.bounds.midX + shift, root.bounds.midX)] {
+                    let a = CABasicAnimation(keyPath: "position.x")
+                    a.fromValue = from
+                    a.toValue = to
+                    a.duration = duration
+                    a.timingFunction = curve
+                    l.position.x = to
+                    l.add(a, forKey: "slide")
+                }
             }
             CATransaction.commit()
         }
@@ -133,7 +153,7 @@ final class Slide {
         l.frame = bounds
         l.contents = image
         l.contentsGravity = .resize
-        l.actions = ["contents": NSNull()]
+        l.actions = ["contents": NSNull(), "position": NSNull(), "opacity": NSNull()]   // only explicit animations
         return l
     }
 
