@@ -47,6 +47,15 @@ final class WindowEngine {
     /// Last ⌘-` / ⌘⇧-` press; window cycling stays inside the current context.
     private var lastCycleKey = Date.distantPast
     private var keyMonitor: Any?
+    /// Demo mode: your windows minimized out of the way, demo windows closed again at the end.
+    private var demoMinimized: [CGWindowID] = []
+    private var demoCreated: Set<CGWindowID> = []
+    private var demoActive = false
+    /// When each app last got a new window, so an activation that opens one doesn't pull you away.
+    private var lastAdoptAt: [pid_t: Date] = [:]
+
+    /// Your own windows tucked away by demo mode: Dock clicks and running dots ignore them.
+    private func demoHidden(_ id: CGWindowID) -> Bool { demoActive && demoMinimized.contains(id) }
 
     private static let stateURL = DockConfig.url.deletingLastPathComponent().appendingPathComponent("state.json")
     private static let fallbackNewWindowApps: Set<String> = [
@@ -196,7 +205,7 @@ final class WindowEngine {
     /// Clicking an app in the current context's Dock.
     func openApp(_ bundleID: String) {
         let mine = windows.values
-            .filter { $0.bundleID == bundleID && ($0.context == current || isShared(bundleID)) }
+            .filter { $0.bundleID == bundleID && ($0.context == current || isShared(bundleID)) && !demoHidden($0.id) }
             .sorted { $0.lastFocus > $1.lastFocus }
         if let top = mine.first(where: { !AX.isMinimized($0.element) }) ?? mine.first {
             ignoreFocusUntil = Date().addingTimeInterval(0.3)
@@ -209,7 +218,7 @@ final class WindowEngine {
             return
         }
 
-        let elsewhere = windows.values.filter { $0.bundleID == bundleID }.sorted { $0.lastFocus > $1.lastFocus }
+        let elsewhere = windows.values.filter { $0.bundleID == bundleID && !demoHidden($0.id) }.sorted { $0.lastFocus > $1.lastFocus }
         if elsewhere.isEmpty {
             // Running with no windows: do what the native Dock does (a reopen event shows the main
             // window). ⌘N here would mean "new message" in Mimestream or Messages.
@@ -285,7 +294,7 @@ final class WindowEngine {
     }
 
     func hasWindows(_ bundleID: String, in context: String) -> Bool {
-        windows.values.contains { $0.bundleID == bundleID && ($0.context == context || isShared(bundleID)) }
+        windows.values.contains { $0.bundleID == bundleID && ($0.context == context || isShared(bundleID)) && !demoHidden($0.id) }
     }
 
     func isShared(_ bundleID: String) -> Bool { config.shared.contains(bundleID) }
@@ -403,6 +412,8 @@ final class WindowEngine {
         }
         windows[id] = Window(id: id, pid: pid, bundleID: bundleID, element: el, context: context,
                              parkedFrame: parked, lastFocus: parked == nil ? Date() : .distantPast)
+        if demoActive { demoCreated.insert(id) }
+        lastAdoptAt[pid] = Date()
         observeWindow(el, pid: pid, bundleID: bundleID)
         titles[id] = Self.normalized(AX.title(el))
 
@@ -480,18 +491,25 @@ final class WindowEngine {
     /// A link from another app activates the browser, which may put the tab in a window other than
     /// the one it focuses (Dia routes by profile). Hold the focus decision briefly so a parked
     /// window that gets the new tab can claim it.
+    ///
+    /// Any app gets the same short wait: if it opens a new window meanwhile (a document from Finder,
+    /// ⌘N, a link that makes a window), that window joins the current context and we stay here.
     private func appActivated(_ app: NSRunningApplication) {
-        guard let bundleID = app.bundleIdentifier, Self.browsers.contains(bundleID) else {
-            focusChanged(pid: app.processIdentifier)
-            return
-        }
         let pid = app.processIdentifier
         let activatedAt = Date()
+        guard let bundleID = app.bundleIdentifier, Self.browsers.contains(bundleID) else {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+                guard let self, (self.lastAdoptAt[pid] ?? .distantPast) < activatedAt else { return }
+                self.focusChanged(pid: pid)
+            }
+            return
+        }
         // Our own switches and ⌘N activate the browser too; those aren't links.
         let ours = activatedAt < ignoreFocusUntil || awaitingWindow.map { $0.bundleID == bundleID && activatedAt < $0.until } == true
         linkWatch[pid] = ours ? nil : activatedAt.addingTimeInterval(2.5)
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
-            guard let self, self.lastLinkSwitch < activatedAt else { return }
+            guard let self, self.lastLinkSwitch < activatedAt,
+                  (self.lastAdoptAt[pid] ?? .distantPast) < activatedAt else { return }
             self.focusChanged(pid: pid)
         }
     }
@@ -570,6 +588,37 @@ final class WindowEngine {
     }
 
     private func changed() { onChange() }
+
+    // MARK: - Demo mode
+
+    /// contextdock://demo/start: minimizes every managed window (all contexts) so a recording shows
+    /// only windows opened afterwards. Parked windows are minimized from their corner, so they come
+    /// back parked.
+    func demoStart() {
+        guard !demoActive else { return }
+        demoActive = true
+        demoCreated = []
+        demoMinimized = windows.values.filter { !AX.isMinimized($0.element) }.map(\.id)
+        for id in demoMinimized { if let w = windows[id] { AX.set(w.element, kAXMinimizedAttribute, kCFBooleanTrue) } }
+        note("demo start: minimized \(demoMinimized.count)")
+    }
+
+    /// contextdock://demo/end: closes the windows that appeared during the demo, then un-minimizes yours.
+    func demoEnd() {
+        guard demoActive else { return }
+        demoActive = false
+        for id in demoCreated {
+            guard let w = windows[id], let close: AXUIElement = AX.get(w.element, kAXCloseButtonAttribute) else { continue }
+            AXUIElementPerformAction(close, kAXPressAction as CFString)
+        }
+        for id in demoMinimized { if let w = windows[id] { AX.set(w.element, kAXMinimizedAttribute, kCFBooleanFalse) } }
+        note("demo end: closed \(demoCreated.count), restored \(demoMinimized.count)")
+        demoCreated = []
+        demoMinimized = []
+        applyVisibility()
+        focusCurrent(preferring: nil)
+        changed()
+    }
 
     /// Writes debug.json next to the state: every managed window with its live frame.
     func dump() {

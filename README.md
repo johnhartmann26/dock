@@ -31,7 +31,7 @@ On first launch, approve **ContextDock** in System Settings > Privacy & Security
 - If the app is running with no windows (Mimestream, Messages), it gets the native Dock's "reopen", so its main window shows here.
 - If the app isn't running, it launches here.
 
-**Where new windows go:** new windows join the current context.
+**Where new windows go:** new windows join the current context. That includes opening a document in an app whose last window is in another context: you stay where you are.
 
 **⌘-`** cycles only the current context's windows of the front app.
 
@@ -41,7 +41,7 @@ On first launch, approve **ContextDock** in System Settings > Privacy & Security
 
 **Editing contexts:** menu bar > Edit Dock Contents… opens `~/Library/Application Support/ContextDock/config.json` (contexts, Dock apps by bundle id, colours, keys, `shared`). Relaunch to apply.
 
-**Automation:** `open -g contextdock://switch/work`, `contextdock://move-front/personal`, `contextdock://open/<bundle id>`, `contextdock://new-window/<bundle id>`, `contextdock://recover`, `contextdock://dump` (writes `debug.json` next to the state).
+**Automation:** `open -g contextdock://switch/work`, `contextdock://move-front/personal`, `contextdock://open/<bundle id>`, `contextdock://new-window/<bundle id>`, `contextdock://recover`, `contextdock://dump` (writes `debug.json` next to the state), `contextdock://demo/start` and `contextdock://demo/end` (minimize your windows for a clean recording, then restore them).
 
 ## Design review
 

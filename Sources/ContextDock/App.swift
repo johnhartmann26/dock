@@ -78,6 +78,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             case "new-window": engine.newWindowHere(arg)
             case "recover": recover()
             case "dump": engine.dump()
+            case "demo": arg == "start" ? engine.demoStart() : engine.demoEnd()
             default: break
             }
         }

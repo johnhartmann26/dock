@@ -136,3 +136,16 @@ Tested by John in Dia, with one Dia window in Work and one in Personal. The swit
 - **Hover:** works on the live, non-activating Dock panel (checked by moving the pointer onto it). A context button brightens; an app icon lifts 2pt, scales 1.08 and shows its name in a frosted capsule. The video shows no hover states, so these follow the native Dock.
 
 **Left as is:** layout, spacing and the icon-to-control size ratios already matched the video within a few points.
+
+## 2026-10-27: Demo setup findings; demo dropped
+
+John decided not to record the demo, so that deliverable from the brief isn't produced. `contextdock://demo/start|end` stays for a later recording:
+- **start:** minimizes every managed window (parked ones from their corner, so they come back parked).
+- **end:** closes windows that appeared during the demo and un-minimizes the rest.
+- While a demo is active, Dock clicks and running dots ignore the minimized windows, so clicking Dia opens a fresh window instead of restoring a real one.
+
+**Bug found and fixed: opening a document pulled you to another context.** Opening "Launch plan.txt" from Work while TextEdit's last window was in Personal switched the Dock to Personal (focus-follow on activation), and the new document landed there. Now every app activation waits 0.3s before following focus. If the app gets a new window in that time (a document from Finder or Terminal, ⌘N, a link that makes a window), the window joins the current context and the Dock stays put. ⌘-Tab to an app whose windows live elsewhere still follows, 0.3s later. Verified: the same open from Work stayed in Work with no follow.
+
+**Not a bug:** two `work -> agents: dock` switches during setup were John clicking Agents.
+
+**Seen once, not investigated:** after demo start, Discord's window was visible in Personal. It either didn't minimize or restored itself (Electron).
