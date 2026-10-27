@@ -70,11 +70,19 @@ The code is our own and short. If AeroSpace code is copied verbatim later, add i
 
 Browsers covered: Dia, Yab, Safari, Chrome, Arc, Firefox.
 
-**Tested live:** three links opened from Agents. Each time Dia put the link in its last-used window (Personal) and focused it, and the Dock went to Personal with that window in front. The Dia mis-route from the first run (tab in one window, focus on another) didn't happen again, so the **parked-window path itself is not yet verified live**. To force it: activate Dia and add a tab to a parked window by AppleScript. That needs a one-time Automation approval.
+**Tested live:** three links opened from Agents. Each time Dia put the link in its last-used window (Personal) and focused it, and the Dock went to Personal with that window in front. The Dia mis-route from the first run (tab in one window, focus on another) didn't happen again on its own.
+
+**Parked-window path verified live (AppleScript, John approved Automation for Dia):**
+- Setup: the Personal Dia window was focused last, then Agents was active.
+- One script ran `activate` on Dia, then `make new tab at end of tabs of <window whose active profile is "Work">`.
+- Result, 4 runs out of 4: the Dock went straight to Work with the Work Dia window in front on the new tab, and the Personal window stayed parked.
+- The switch trail in `contextdock://dump` shows a single `agents -> work: link-landed company.thebrowser.dia 707239`, so the parked window claimed the tab before focus-follow ran.
 
 **Known gaps:**
 - A link that reuses an already-active tab with the same title isn't detected.
 - A parked tab whose page title changes by itself in the 2.5s after you bring the browser forward could cause a false switch.
+
+Every switch now records its reason (dock, hotkey, url, menu, focus-follow, link-landed) in the last 20 entries of `recentSwitches` in `debug.json`. `log show` returned nothing for this app from a non-admin shell, so the trail lives in the dump instead.
 
 ## 2026-10-27: Signing is pinned
 

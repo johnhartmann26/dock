@@ -56,7 +56,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         for ctx in engine.config.contexts {
             guard let code = HotKeys.keyCode(for: ctx.key) else { continue }
             let id = ctx.id
-            hotKeys.register(code, modifiers: [.control, .option]) { [weak self] in self?.engine.switchTo(id) }
+            hotKeys.register(code, modifiers: [.control, .option]) { [weak self] in self?.engine.switchTo(id, reason: "hotkey") }
             hotKeys.register(code, modifiers: [.control, .option, .shift]) { [weak self] in self?.engine.moveFocusedWindow(to: id) }
         }
     }
@@ -71,7 +71,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         for url in urls where url.scheme == "contextdock" {
             let arg = url.pathComponents.dropFirst().first ?? ""
             switch url.host {
-            case "switch": engine.switchTo(arg)
+            case "switch": engine.switchTo(arg, reason: "url")
             case "move-front": engine.moveFocusedWindow(to: arg)
             case "open": engine.openApp(arg)
             case "recover": recover()
@@ -166,7 +166,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return menu
     }
 
-    @objc private func switchFromMenu(_ sender: NSMenuItem) { engine.switchTo(sender.representedObject as! String) }
+    @objc private func switchFromMenu(_ sender: NSMenuItem) { engine.switchTo(sender.representedObject as! String, reason: "menu") }
     @objc private func moveFromMenu(_ sender: NSMenuItem) { engine.moveFocusedWindow(to: sender.representedObject as! String) }
     @objc private func focusWindow(_ sender: NSMenuItem) { engine.focus(sender.representedObject as! CGWindowID) }
     @objc private func openApp(_ sender: NSMenuItem) { engine.openApp(sender.representedObject as! String) }

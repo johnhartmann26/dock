@@ -109,7 +109,10 @@ final class WindowEngine {
 
     // MARK: - Switching
 
-    func switchTo(_ target: String, focusing preferred: CGWindowID? = nil) {
+    /// The last few switches and why, for `contextdock://dump`.
+    private var recentSwitches: [String] = []
+
+    func switchTo(_ target: String, focusing preferred: CGWindowID? = nil, reason: String = "dock") {
         guard config.contexts.contains(where: { $0.id == target }) else { return }
         if target == current {
             if let preferred { focus(preferred) }
@@ -117,6 +120,8 @@ final class WindowEngine {
         }
         noteFocusedWindow()
         ignoreFocusUntil = Date().addingTimeInterval(0.45)
+        recentSwitches.append("\(Date().formatted(.iso8601.time(includingFractionalSeconds: true))) \(current) -> \(target): \(reason)")
+        recentSwitches = Array(recentSwitches.suffix(20))
         current = target
         applyVisibility()
         focusCurrent(preferring: preferred)
@@ -403,7 +408,7 @@ final class WindowEngine {
         }
         windows[id]?.lastFocus = Date()
         if w.context != current && !isShared(w.bundleID) {
-            switchTo(w.context, focusing: id)
+            switchTo(w.context, focusing: id, reason: "focus-follow \(w.bundleID) \(id)")
         }
     }
 
@@ -437,7 +442,7 @@ final class WindowEngine {
               w.parkedFrame != nil, w.context != current, !isShared(w.bundleID) else { return }
         linkWatch[pid] = nil
         lastLinkSwitch = Date()
-        switchTo(w.context, focusing: id)
+        switchTo(w.context, focusing: id, reason: "link-landed \(w.bundleID) \(id)")
     }
 
     /// Ignores unread counters like "(3) Inbox" so a badge update in a parked tab isn't read as a new tab.
@@ -511,7 +516,8 @@ final class WindowEngine {
                     "frame": [f.minX, f.minY, f.width, f.height], "parked": w.parkedFrame != nil,
                     "focused": w.id == focusedWindow]
         }
-        let out: [String: Any] = ["current": current, "frontApp": NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "", "windows": rows]
+        let out: [String: Any] = ["current": current, "frontApp": NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "", "windows": rows,
+                                  "recentSwitches": recentSwitches]
         if let data = try? JSONSerialization.data(withJSONObject: out, options: [.prettyPrinted, .sortedKeys]) {
             try? data.write(to: Self.stateURL.deletingLastPathComponent().appendingPathComponent("debug.json"))
         }
