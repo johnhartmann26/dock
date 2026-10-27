@@ -46,7 +46,7 @@ On first launch, approve **ContextDock** in System Settings > Privacy & Security
 
 **Editing contexts:** menu bar > Edit Dock Contents… opens `~/Library/Application Support/ContextDock/config.json` (contexts, Dock apps by bundle id, colours, keys, `shared`). Relaunch to apply.
 
-**Automation:** `open -g contextdock://switch/work`, `contextdock://move-front/personal`, `contextdock://open/<bundle id>`, `contextdock://new-window/<bundle id>`, `contextdock://recover`, `contextdock://dump` (writes `debug.json` next to the state), `contextdock://login/on` or `/off`, `contextdock://demo/start` and `contextdock://demo/end` (minimize your windows for a clean recording, then restore them).
+**Automation:** `open -g contextdock://switch/work`, `contextdock://move-front/personal`, `contextdock://move/<window id>/<context>` (ids are in `debug.json`), `contextdock://open/<bundle id>`, `contextdock://new-window/<bundle id>`, `contextdock://recover`, `contextdock://dump` (writes `debug.json` next to the state), `contextdock://login/on` or `/off`, `contextdock://demo/start` and `contextdock://demo/end` (minimize your windows for a clean recording, then restore them).
 
 ## App icon
 

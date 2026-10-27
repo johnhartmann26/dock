@@ -109,6 +109,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             switch url.host {
             case "switch": engine.switchTo(arg, reason: "url")
             case "move-front": engine.moveFocusedWindow(to: arg)
+            case "move":   // contextdock://move/<window id>/<context>
+                let parts = url.pathComponents.dropFirst()
+                if parts.count == 2, let id = CGWindowID(parts.first!) { engine.move(id, to: parts.last!) }
             case "open": engine.openApp(arg)
             case "new-window": engine.newWindowHere(arg)
             case "recover": recover()
