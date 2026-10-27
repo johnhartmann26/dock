@@ -250,3 +250,18 @@ John confirmed that clicking Personal with the Dia video fullscreen keeps him on
 - If you drag a window back down within 10s of a nudge, it's treated as deliberate and left there.
 
 John confirmed that dragging or maximizing a window now keeps it out from behind the Dock, and it feels right.
+
+## 2026-10-27: Global three-finger swipe
+
+**John asked for a three-finger left/right swipe anywhere to switch contexts.** There's no public API for system-wide trackpad gestures, so `Gestures.swift` loads the private MultitouchSupport framework with dlopen (MTDeviceCreateList, MTRegisterContactFrameCallback, MTDeviceStart), as BetterTouchTool and Swish do. It works with SIP on and needs no extra permission. Each finger record is 96 bytes, and the normalized position is two Floats at offset 32. If the framework or its symbols are missing, the feature logs that it's off and does nothing.
+
+**Gesture:**
+- Exactly three fingers, averaged.
+- Fires once per gesture after 0.12 of the trackpad width, if the movement is at least 1.5× more horizontal than vertical, so vertical three-finger swipes (Mission Control) are ignored.
+- Same direction as the Dock swipe (fingers left → the context on the right), through one shared `step(fingers:)`, and stops at the ends.
+
+**No double action:** it only acts while `TrackpadThreeFingerHorizSwipeGesture` is 0 for both the built-in trackpad and a Magic Trackpad, so macOS isn't also using three fingers. This is re-read on every swipe, and a skip is logged once. John moved "Swipe between full-screen apps" to four fingers (3-finger = 0, 4-finger = 2).
+
+**Robustness:** devices are re-attached on wake and display wake. A Magic Trackpad connected later is picked up on the next wake, not yet on connect.
+
+**Verified:** the listener attached to 1 trackpad. The swipe itself needs John's fingers.

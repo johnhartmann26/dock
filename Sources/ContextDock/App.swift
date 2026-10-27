@@ -28,6 +28,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var noNap: NSObjectProtocol?
     private var swipeDistance: CGFloat = 0
     private var swipeUsed = false
+    private let threeFinger = ThreeFingerSwipe()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         noNap = ProcessInfo.processInfo.beginActivity(options: [.userInitiatedAllowingIdleSystemSleep, .latencyCritical],
@@ -69,6 +70,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func begin() {
         engine.start()
+        threeFinger.log = { [weak self] in self?.engine.note($0) }
+        threeFinger.onSwipe = { [weak self] dir in self?.step(fingers: dir, reason: "3-finger swipe") }
+        threeFinger.begin()
         for ctx in engine.config.contexts {
             guard let code = HotKeys.keyCode(for: ctx.key) else { continue }
             let id = ctx.id
@@ -91,10 +95,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         swipeDistance += event.isDirectionInvertedFromDevice ? event.scrollingDeltaX : -event.scrollingDeltaX
         guard abs(swipeDistance) > 36 else { return }
         swipeUsed = true
+        step(fingers: swipeDistance < 0 ? -1 : 1, reason: "swipe")
+    }
+
+    /// One context left or right. Fingers moving left (-1) go to the context on the right; stops at the ends.
+    private func step(fingers: Int, reason: String) {
         let ids = engine.config.contexts.map(\.id)
         guard let i = ids.firstIndex(of: engine.current) else { return }
-        let next = swipeDistance < 0 ? i + 1 : i - 1
-        if ids.indices.contains(next) { engine.switchTo(ids[next], reason: "swipe") }
+        let next = fingers < 0 ? i + 1 : i - 1
+        if ids.indices.contains(next) { engine.switchTo(ids[next], reason: reason) }
     }
 
     func applicationWillTerminate(_ notification: Notification) {

@@ -19,6 +19,7 @@ On first launch, approve **ContextDock** in System Settings > Privacy & Security
 | Do this | To |
 |---|---|
 | Click a context in the Dock, or ⌃⌥1 / ⌃⌥2 / ⌃⌥3 | Switch context |
+| Three-finger swipe left or right anywhere (with macOS's "Swipe between full-screen apps" set to four fingers) | Next or previous context |
 | Two-finger swipe left or right on the Dock bar | Next or previous context, like swiping between desktops (stops at the ends) |
 | Click an app in the Dock | Bring up its most recent window in this context |
 | ⌃⌥⇧1 / 2 / 3, or the menu bar > Move Front Window To | Send the front window to another context |
