@@ -265,3 +265,10 @@ John confirmed that dragging or maximizing a window now keeps it out from behind
 **Robustness:** devices are re-attached on wake and display wake. A Magic Trackpad connected later is picked up on the next wake, not yet on connect.
 
 **Verified:** the listener attached to 1 trackpad. The swipe itself needs John's fingers.
+
+**Follow-ups on the three-finger swipe:**
+- **Double step:** one three-finger swipe over the Dock fired both the Dock swipe and the global swipe (23:20:40.485 `swipe`, then .578 `3-finger swipe`), because a three-finger move there also arrives as the Dock's scroll. Once either source steps, the other is ignored for 0.6s.
+- **Missed swipes (John):** the tracker reset whenever the finger count left exactly 3 (a late or early finger, a grazing thumb), so the rest of the swipe was too short to count. It now starts when three fingers are down, follows those fingers by id (offset 16), and averages the movement of at least two of them. It ends when all fingers are up, or is abandoned if a fourth arrives (the Spaces swipe). The threshold is 0.08 of the width at ≥1.2× horizontal. Only fingers in contact count.
+- **Touch states, verified on John's trackpad:** the first three-finger frame logged states `4,1,4`, so 4 = touching and 1 = just landing. That's the 0-based numbering (3 making, 4 touching, 5 breaking), and the accepted range 3...5 is right.
+
+John: a dozen three-finger swipes, every one switched.
