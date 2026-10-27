@@ -23,6 +23,7 @@ On first launch, approve **ContextDock** in System Settings > Privacy & Security
 | ⌃⌥⇧1 / 2 / 3, or the menu bar > Move Front Window To | Send the front window to another context |
 | Right-click an app in the Dock | List its windows here, move one, or open a new window here |
 | Menu bar > Show All Windows (Recover) | Put every parked window back on screen |
+| Menu bar > Open at Login | Start ContextDock when you log in (also in System Settings > General > Login Items) |
 | Menu bar > Quit | Restore all windows and quit |
 
 **When you click an app in the Dock:**
@@ -42,7 +43,7 @@ On first launch, approve **ContextDock** in System Settings > Privacy & Security
 
 **Editing contexts:** menu bar > Edit Dock Contents… opens `~/Library/Application Support/ContextDock/config.json` (contexts, Dock apps by bundle id, colours, keys, `shared`). Relaunch to apply.
 
-**Automation:** `open -g contextdock://switch/work`, `contextdock://move-front/personal`, `contextdock://open/<bundle id>`, `contextdock://new-window/<bundle id>`, `contextdock://recover`, `contextdock://dump` (writes `debug.json` next to the state), `contextdock://demo/start` and `contextdock://demo/end` (minimize your windows for a clean recording, then restore them).
+**Automation:** `open -g contextdock://switch/work`, `contextdock://move-front/personal`, `contextdock://open/<bundle id>`, `contextdock://new-window/<bundle id>`, `contextdock://recover`, `contextdock://dump` (writes `debug.json` next to the state), `contextdock://login/on` or `/off`, `contextdock://demo/start` and `contextdock://demo/end` (minimize your windows for a clean recording, then restore them).
 
 ## Design review
 

@@ -1,5 +1,6 @@
 import AppKit
 import Carbon.HIToolbox
+import ServiceManagement
 import SwiftUI
 
 @main
@@ -79,6 +80,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             case "recover": recover()
             case "dump": engine.dump()
             case "demo": arg == "start" ? engine.demoStart() : engine.demoEnd()
+            case "login": setOpenAtLogin(arg == "on")
             default: break
             }
         }
@@ -140,6 +142,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(.separator())
         menu.addItem(withTitle: "Edit Dock Contents…", action: #selector(editConfig), keyEquivalent: ",").target = self
         menu.addItem(withTitle: "Show All Windows (Recover)", action: #selector(recover), keyEquivalent: "").target = self
+        let login = menu.addItem(withTitle: "Open at Login", action: #selector(toggleLogin), keyEquivalent: "")
+        login.target = self
+        login.state = SMAppService.mainApp.status == .enabled ? .on : .off
         menu.addItem(.separator())
         menu.addItem(withTitle: "Quit ContextDock", action: #selector(quit), keyEquivalent: "q").target = self
         return menu
@@ -181,6 +186,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func editConfig() { NSWorkspace.shared.open(DockConfig.url) }
     @objc private func recover() { engine.restoreAll() ; engine.switchTo(engine.current) }
     @objc private func quit() { NSApp.terminate(nil) }
+
+    @objc private func toggleLogin() { setOpenAtLogin(SMAppService.mainApp.status != .enabled) }
+
+    /// A regular Login Item (System Settings > General > Login Items), so it can be turned off there too.
+    private func setOpenAtLogin(_ on: Bool) {
+        do {
+            if on { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() }
+        } catch {
+            NSLog("ContextDock: login item change failed: \(error.localizedDescription)")
+        }
+        updateStatusItem()
+    }
 }
 
 /// The floating bar. Non-activating so clicking it never steals focus from your window.
