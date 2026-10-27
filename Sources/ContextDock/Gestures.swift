@@ -99,47 +99,80 @@ final class ThreeFingerSwipe {
     }
 }
 
-/// Gesture state, touched only on the multitouch callback thread.
-private struct SwipeTracker {
-    var startX: Float?
-    var startY: Float = 0
-    var fired = false
+/// One finger in a MultitouchSupport frame.
+private struct Touch {
+    let id: Int32
+    let x: Float, y: Float
+}
 
-    /// Normalized 0...1 trackpad coordinates. Returns a direction once per three-finger gesture.
-    mutating func update(fingers: Int, avgX: Float, avgY: Float) -> Int? {
-        guard fingers == 3 else {
-            startX = nil
+/// Gesture state, touched only on the multitouch callback thread.
+///
+/// A gesture starts when three fingers are down and follows *those* fingers by id, so a finger
+/// landing late, lifting early or a thumb grazing the pad doesn't restart it. It ends when every
+/// finger is up, or when a fourth arrives (four fingers is the Spaces swipe).
+private struct SwipeTracker {
+    var start: [Int32: (x: Float, y: Float)] = [:]
+    var fired = false
+    var abandoned = false
+
+    mutating func update(_ touches: [Touch]) -> Int? {
+        if touches.isEmpty {
+            start = [:]
             fired = false
+            abandoned = false
             return nil
         }
-        guard let x0 = startX else {
-            startX = avgX
-            startY = avgY
+        if touches.count >= 4 { abandoned = true }
+        guard !abandoned, !fired else { return nil }
+        if start.isEmpty {
+            guard touches.count == 3 else { return nil }
+            for t in touches { start[t.id] = (t.x, t.y) }
             return nil
         }
-        guard !fired else { return nil }
-        let dx = avgX - x0, dy = avgY - startY
-        guard abs(dx) > 0.12, abs(dx) > abs(dy) * 1.5 else { return nil }
+        var dx: Float = 0, dy: Float = 0, n: Float = 0
+        for t in touches {
+            guard let s = start[t.id] else { continue }
+            dx += t.x - s.x
+            dy += t.y - s.y
+            n += 1
+        }
+        guard n >= 2 else { return nil }
+        dx /= n
+        dy /= n
+        guard abs(dx) > 0.08, abs(dx) > abs(dy) * 1.2 else { return nil }
         fired = true
         return dx < 0 ? -1 : 1
     }
 }
 
 private nonisolated(unsafe) var tracker = SwipeTracker()
+private nonisolated(unsafe) var loggedStates = false
 
-/// MultitouchSupport's per-frame callback. Each finger record is 96 bytes; the normalized position
-/// (two Floats, 0...1, origin bottom-left) sits at offset 32.
+/// MultitouchSupport's per-frame callback. Each finger record is 96 bytes: identifier at offset 16,
+/// touch state at 20, and the
+/// normalized position (two Floats, 0...1, origin bottom-left) at 32.
 private let contactCallback: @convention(c) (Int32, UnsafeMutableRawPointer?, Int32, Double, Int32) -> Int32 = { _, data, count, _, _ in
-    let n = Int(count)
-    var sx: Float = 0, sy: Float = 0
-    if n == 3, let data {
-        for i in 0..<n {
+    var touches: [Touch] = []
+    var states: [Int32] = []
+    if let data {
+        for i in 0..<Int(count) {
             let f = data.advanced(by: i * 96)
-            sx += f.load(fromByteOffset: 32, as: Float.self)
-            sy += f.load(fromByteOffset: 36, as: Float.self)
+            let state = f.load(fromByteOffset: 20, as: Int32.self)
+            states.append(state)
+            // In contact. Published reverse-engineering numbers these 3-5 or 4-6 (making, touching,
+            // breaking); 3...5 covers "touching" under either, and hovering is rare on a trackpad.
+            guard (3...5).contains(state) else { continue }
+            touches.append(Touch(id: f.load(fromByteOffset: 16, as: Int32.self),
+                                 x: f.load(fromByteOffset: 32, as: Float.self),
+                                 y: f.load(fromByteOffset: 36, as: Float.self)))
         }
     }
-    if let dir = tracker.update(fingers: n, avgX: sx / 3, avgY: sy / 3) {
+    if count >= 3, !loggedStates {
+        loggedStates = true
+        let seen = states.map(String.init).joined(separator: ",")
+        DispatchQueue.main.async { MainActor.assumeIsolated { ThreeFingerSwipe.shared?.log("three-finger swipe: first touch states \(seen)") } }
+    }
+    if let dir = tracker.update(touches) {
         DispatchQueue.main.async {
             MainActor.assumeIsolated { ThreeFingerSwipe.shared?.fire(dir) }
         }
