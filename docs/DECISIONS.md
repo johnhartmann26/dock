@@ -105,4 +105,6 @@ Each pass is recorded in `recentSwitches` as "<why>: N parked, M re-pinned".
 
 ContextDock didn't run a pass, because it only listened for system wake at the time. The display-wake and unlock hooks were added after this test.
 
-**Still open:** a real system sleep (`pmset sleepnow`) and a display plug/unplug.
+**Real system sleep: not applicable on John's Mac.** It never system-sleeps, because an app he runs keeps it awake. `pmset sleepnow` was also refused from the Claude session (0xe00002e2, not permitted). The case that happens day to day is the lid closing (display off plus lock), which passed above and now also triggers the re-pin pass. The system-wake handler stays in place for other setups but hasn't been tested here.
+
+**Still open:** a display plug/unplug.

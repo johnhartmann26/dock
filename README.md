@@ -52,5 +52,5 @@ Window assignments and each parked window's exact frame are written to `~/Librar
 - **Mission Control** shows parked windows tiny in a corner.
 - **Native full-screen windows** aren't moved. They keep their own Space.
 - **Floating panels and palettes** (Granola's notepad, ChatGPT's bar, Meet picture-in-picture) aren't managed, so they show in every context.
-- **Not yet tested:** sleep/wake and display changes. The code re-parks on both.
+- **Sleep and displays:** display off, lock and unlock were tested and held. Real system sleep and plugging/unplugging a display haven't been tested yet (the code re-pins parked windows on both).
 - **Restarting the Mac:** after a restart, windows get new ids, so they all start in the current context. Persistence across a restart is out of scope for v1.
