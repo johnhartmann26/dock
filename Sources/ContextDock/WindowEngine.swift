@@ -56,6 +56,9 @@ final class WindowEngine {
     /// Leaving or entering a fullscreen Space makes macOS focus whatever window that app has on the
     /// new Space, often a parked one from another context. That isn't the user asking to switch.
     private var lastSpaceChange = Date.distantPast
+    /// Windows from another context seen fullscreen; not parked until they've left fullscreen and we
+    /// know whether you followed them out (see `checkLeftFullScreen`).
+    private var seenFullScreen: Set<CGWindowID> = []
 
     /// Your own windows tucked away by demo mode: Dock clicks and running dots ignore them.
     private func demoHidden(_ id: CGWindowID) -> Bool { demoActive && demoMinimized.contains(id) }
@@ -183,7 +186,7 @@ final class WindowEngine {
             let app = AX.app(pid)
             AX.withoutAnimations(app) {
                 for w in list where w.context == current || isShared(w.bundleID) { unpark(w.id) }
-                for w in list where w.context != current && !isShared(w.bundleID) { park(w.id) }
+                for w in list where w.context != current && !isShared(w.bundleID) && !seenFullScreen.contains(w.id) { park(w.id) }
             }
         }
     }
@@ -313,6 +316,40 @@ final class WindowEngine {
     }
 
     func isShared(_ bundleID: String) -> Bool { config.shared.contains(bundleID) }
+
+    /// A window from another context that was fullscreen: once it has left fullscreen, follow it if
+    /// it's the one in front (you exited fullscreen to keep using it), otherwise park it as usual.
+    private func checkLeftFullScreen(_ id: CGWindowID) {
+        guard let w = windows[id] else { seenFullScreen.remove(id); return }
+        if looksFullScreen(w) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in self?.checkLeftFullScreen(id) }
+            return
+        }
+        seenFullScreen.remove(id)
+        guard w.context != current, !isShared(w.bundleID) else { return }
+        if focusedWindow == id {
+            switchTo(w.context, focusing: id, reason: "left fullscreen \(w.bundleID) \(id)")
+        } else {
+            park(id)
+        }
+    }
+
+    /// Native fullscreen, or filling a whole screen without being parked (a parked window from another
+    /// context sits in the corner, so a full-screen one that isn't parked is in a fullscreen Space).
+    private func looksFullScreen(_ w: Window) -> Bool {
+        if AX.isFullScreen(w.element) { return true }
+        guard w.parkedFrame == nil, let f = AX.frame(w.element) else { return false }
+        for screen in NSScreen.screens where Self.same(f, screen.axFrame) || Self.same(f, screen.axVisibleFrame) {
+            return true
+        }
+        return false
+    }
+
+    private static func same(_ a: CGRect, _ b: CGRect) -> Bool {
+        let dx = abs(a.minX - b.minX), dy = abs(a.minY - b.minY)
+        let dw = abs(a.width - b.width), dh = abs(a.height - b.height)
+        return max(dx, dy, dw, dh) < 2
+    }
 
     /// The context an app's new windows belong to, if it has one (config `homes`).
     func home(of bundleID: String) -> String? {
@@ -456,9 +493,21 @@ final class WindowEngine {
         titles[id] = Self.normalized(AX.title(el))
 
         if isNew, parked == nil, context != current, !isShared(bundleID) {
-            // e.g. Velja opened a personal link in a new Safari window while you were in Work.
+            // e.g. Velja opened a personal link in a new Safari window while you were in Work. Decide a
+            // moment later: a new window can also be a fullscreen video (Safari makes one), which lives
+            // in its own Space and shouldn't move you.
             persist()
-            switchTo(context, focusing: id, reason: "home \(bundleID) \(id)")
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
+                guard let self, let w = self.windows[id], w.context != self.current else { return }
+                if self.looksFullScreen(w) {
+                    if self.seenFullScreen.insert(id).inserted {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in self?.checkLeftFullScreen(id) }
+                    }
+                    self.note("fullscreen: \(bundleID) \(id) joined \(w.context), stayed in \(self.current)")
+                } else {
+                    self.switchTo(w.context, focusing: id, reason: "home \(bundleID) \(id)")
+                }
+            }
             return true
         }
 
@@ -513,6 +562,15 @@ final class WindowEngine {
             return
         }
         if w.context != current && !isShared(w.bundleID) {
+            // A fullscreen window has a Space to itself, so seeing it needs no switch: clicking play in
+            // a fullscreen Safari video from Work leaves you in Work.
+            if looksFullScreen(w) {
+                windows[id]?.lastFocus = Date()
+                if seenFullScreen.insert(id).inserted {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in self?.checkLeftFullScreen(id) }
+                }
+                return
+            }
             // Only a *parked* window is macOS's fallback pick; a visible one (say, a window that just
             // left fullscreen) is the one you're looking at, so that still follows.
             if Date().timeIntervalSince(lastSpaceChange) < 1.0, w.parkedFrame != nil {
@@ -690,7 +748,7 @@ final class WindowEngine {
         let rows: [[String: Any]] = windows.values.sorted { $0.id < $1.id }.map { w in
             let f = AX.frame(w.element) ?? .zero
             return ["id": w.id, "app": w.bundleID, "context": w.context, "title": AX.title(w.element),
-                    "frame": [f.minX, f.minY, f.width, f.height], "parked": w.parkedFrame != nil,
+                    "frame": [f.minX, f.minY, f.width, f.height], "parked": w.parkedFrame != nil, "fullscreen": AX.isFullScreen(w.element),
                     "focused": w.id == focusedWindow]
         }
         let out: [String: Any] = ["current": current, "frontApp": NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "", "windows": rows,
