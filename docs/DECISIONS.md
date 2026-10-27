@@ -248,3 +248,5 @@ John confirmed that clicking Personal with the Dia video fullscreen keeps him on
 - A window dragged partway down gets moved up.
 - Windows mostly inside the strip, fullscreen, minimized or parked are left alone, as are ContextDock's own park/unpark moves (0.8s ignore).
 - If you drag a window back down within 10s of a nudge, it's treated as deliberate and left there.
+
+John confirmed that dragging or maximizing a window now keeps it out from behind the Dock, and it feels right.
