@@ -194,3 +194,22 @@ John's config: Personal's Dock has Safari where Dia was. Homes are Safari → pe
 John then clicked real links through Velja, and each one took him to the right context.
 
 With one browser per context, the Dia link-routing problem from earlier (a tab landing in another context's Dia window) mostly goes away.
+
+## 2026-10-27: Fullscreen video (Safari, Dia), verified by John
+
+**Problems, in the order John hit them:**
+1. Leaving a fullscreen Dia video ping-ponged Work ↔ Personal. On the desktop, macOS focused the app's only window there, a parked one from another context, and ContextDock followed it.
+2. AX lists only the current Space's windows, so a launch while in fullscreen saw one window, and pruning dropped windows on other Spaces.
+3. Play/pause in a fullscreen Safari video from another context switched to Personal.
+4. Safari's parked window blinked on screen when a video entered or left fullscreen.
+5. The Dock took about a second to come back after swiping back from a fullscreen Space.
+
+**Rules now:**
+- **Fullscreen windows never switch context.** That covers focusing one, clicking in it and ⌘-Tab to it. It also covers a new window that turns out fullscreen; Safari makes a separate window for fullscreen video, and the home rule waits 0.4s to check. "Fullscreen" is AXFullScreen, or a window from another context that fills a screen without being parked.
+- **Leaving fullscreen:** a fullscreen window from another context isn't parked until it has left fullscreen (checked every 1.2s). Then, if it's in front, ContextDock follows it to its context; if not, it's parked.
+- **After a Space change,** focus moving to a *parked* window is macOS's fallback pick and isn't followed; ContextDock takes keyboard focus instead, so it never yanks you to another Space. A visible window is followed as usual.
+- **On every Space change and app activation,** ContextDock rescans for windows it hasn't seen (they get their saved context). Pruning only drops windows the window server says are gone.
+- **Parked windows** are watched with kAXMoved and put straight back when an app moves them on screen. The Space-change pass is the backstop. It counts a window as back only by x, since macOS clamps y.
+- **The Dock hides** while the front app's focused window is fullscreen *and on screen*. It checks at once on every Space change and app activation, and again at 0.3s and 1.1s.
+
+**Verified by John:** play/pause in a fullscreen Safari video from Work keeps him in Work, and exiting takes him to Personal with the video. The Safari blip is mostly gone; it can still flash for a frame, because the re-tuck happens after the app's move. The Dock shows right away on swiping back.
