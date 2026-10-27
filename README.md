@@ -45,6 +45,10 @@ On first launch, approve **ContextDock** in System Settings > Privacy & Security
 
 **Automation:** `open -g contextdock://switch/work`, `contextdock://move-front/personal`, `contextdock://open/<bundle id>`, `contextdock://new-window/<bundle id>`, `contextdock://recover`, `contextdock://dump` (writes `debug.json` next to the state), `contextdock://login/on` or `/off`, `contextdock://demo/start` and `contextdock://demo/end` (minimize your windows for a clean recording, then restore them).
 
+## App icon
+
+`swift scripts/make-icon.swift` redraws `Resources/AppIcon.icns`: the dusk gradient from the reference video with a small Dock (the Work pill, the Personal and Agents buttons, an app). It's drawn from shapes because SF Symbols can't be used in app icons. Run `./scripts/install.sh` afterwards.
+
 ## Design review
 
 `/Applications/ContextDock.app/Contents/MacOS/ContextDock --gallery` opens a window with every Dock state, forced hover states and a Dock that switches every 1.6s. It doesn't touch your windows.
