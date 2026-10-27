@@ -20,7 +20,7 @@ struct DockConfig: Codable {
     /// Apps whose new windows always go to one context, by bundle id (one browser per context).
     /// Optional so configs from before this key still load.
     var homes: [String: String]?
-    /// The frosted wipe on switches you make (on unless set to false).
+    /// The slide on switches you make (on unless set to false).
     var switchAnimation: Bool?
 
     static let fallback = DockConfig(

@@ -43,7 +43,7 @@ On first launch, approve **ContextDock** in System Settings > Privacy & Security
 
 **Home apps (one browser per context):** `homes` in config.json maps an app to a context, for example Safari → Personal, Dia → Work, Yab → Agents. A new window from a home app goes to its home context and the Dock switches there, so a link a router like Velja opens in Safari takes you to Personal from anywhere. Windows you open on purpose (a Dock click or New Window Here) stay where you are.
 
-**Switch animation:** switches you make play a quick frosted wipe in the direction you're going, tinted with the destination context's colour. Set `"switchAnimation": false` in config.json to turn it off. With Reduce Motion on, it fades instead.
+**Switch animation:** switches you make slide like Spaces: the old screen slides out and the new one slides in. It uses screen snapshots, so it needs Screen Recording permission; until that's granted, switches are instant. Set `"switchAnimation": false` in config.json to turn it off. With Reduce Motion on, it fades instead.
 
 **Room for the Dock:** like the native Dock, the strip it sits in is kept clear. A window you drag or resize so it ends up behind the Dock gets moved up or shortened when you let go. Drag it back down within 10 seconds and it stays.
 

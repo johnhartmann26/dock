@@ -287,3 +287,12 @@ John: a dozen three-finger swipes, every one switched.
 **When it plays:** for switches you make (Dock click, hotkey, Dock swipe, three-finger swipe, menu). Focus-follow, links, home windows and `contextdock://switch` stay instant; `contextdock://switch-animated/<id>` plays it. A switch requested mid-wipe goes through instantly. With Reduce Motion on, it fades in place. `"switchAnimation": false` in config.json turns it off.
 
 **Measured:** covered at 120–131ms, swap 76–103ms, reveal 102–176ms. The look hasn't been recorded, because frames would show John's windows; John judges it on screen.
+
+**Replaced: the frosted wipe "looks pretty bad" (John), so it's now a Spaces-style slide from real snapshots.** John chose this over a crossfade or no animation, accepting Screen Recording permission. `Slide.swift`:
+1. ScreenCaptureKit snapshots the main display, excluding ContextDock's own windows (`SCContentFilter(excludingApplications:)`, `SCScreenshotManager.captureImage`, at full backing resolution).
+2. An opaque overlay one level below the Dock shows the snapshot. The windows swap underneath, and 45ms later, once apps have redrawn, a second snapshot is taken.
+3. Both pictures slide by one screen width toward the side you're leaving over 0.28s, with a cubic-bezier (0.25, 0.85, 0.25, 1) curve. Then the overlay is removed, leaving the live windows.
+
+The menu bar and the Dock stay live on top. Snapshots exist only in memory during the transition. Without permission, ContextDock asks once and switches instantly. With Reduce Motion on, or if the second snapshot fails, the old picture fades over the live windows instead. The content filter is built at launch and after display changes, because the first lookup costs about 200ms. `Wipe.swift` is removed. Screen Recording was granted to the pinned Apple Development signature.
+
+**Measured:** snapshot 37–93ms, swap plus second snapshot 122–139ms, slide 288–293ms, so about 0.45–0.5s from click to settled.

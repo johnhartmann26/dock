@@ -30,10 +30,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var swipeUsed = false
     private let threeFinger = ThreeFingerSwipe()
     private var lastStep: (reason: String, at: Date)?
-    private lazy var wipe: Wipe = {
-        let w = Wipe()
-        w.log = { [weak self] in self?.engine.note($0) }
-        return w
+    private lazy var slide: Slide = {
+        let s = Slide()
+        s.log = { [weak self] in self?.engine.note($0) }
+        return s
     }()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -49,6 +49,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         panel = DockPanel(state: state)
         panel.orderFrontRegardless()
+        NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.slide.displaysChanged() }
+        }
         // Scroll events land on the panel only over the visible bar (the rest is click-through).
         swipeMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
             guard let self, event.window === self.panel else { return event }
@@ -79,6 +82,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         threeFinger.log = { [weak self] in self?.engine.note($0) }
         threeFinger.onSwipe = { [weak self] dir in self?.step(fingers: dir, reason: "3-finger swipe") }
         threeFinger.begin()
+        slide.prepare()
         for ctx in engine.config.contexts {
             guard let code = HotKeys.keyCode(for: ctx.key) else { continue }
             let id = ctx.id
@@ -116,20 +120,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if ids.indices.contains(next) { userSwitch(to: ids[next], reason: reason) }
     }
 
-    /// A switch you asked for (Dock, hotkey, swipe, menu) plays the frosted wipe; switches an app
+    /// A switch you asked for (Dock, hotkey, swipe, menu) plays the slide; switches an app
     /// triggers (focus-follow, links, home windows) stay instant so their window isn't held up.
     private func userSwitch(to id: String, reason: String) {
         let ids = engine.config.contexts.map(\.id)
-        guard id != engine.current, let from = ids.firstIndex(of: engine.current), let to = ids.firstIndex(of: id),
-              let ctx = engine.config.contexts.first(where: { $0.id == id }) else {
+        guard id != engine.current, let from = ids.firstIndex(of: engine.current), let to = ids.firstIndex(of: id) else {
             engine.switchTo(id, reason: reason)
             return
         }
-        guard engine.config.switchAnimation ?? true, !wipe.running else {
+        guard engine.config.switchAnimation ?? true, !slide.running else {
             engine.switchTo(id, reason: reason)
             return
         }
-        wipe.run(direction: to > from ? 1 : -1, tint: NSColor(ctx.tint), below: panel) { [weak self] in
+        slide.run(direction: to > from ? 1 : -1, below: panel) { [weak self] in
             self?.engine.switchTo(id, reason: reason)
         }
     }
