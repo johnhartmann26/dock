@@ -54,6 +54,11 @@ final class WindowEngine {
     /// When each app last got a new window, so an activation that opens one doesn't pull you away.
     private var lastAdoptAt: [pid_t: Date] = [:]
     private let startedAt = Date()
+    /// Keeping windows out from behind the Dock: our own moves to ignore, pending checks, and when
+    /// each window was last nudged (moving it back down soon after means you want it there).
+    private var ownMoveUntil: [CGWindowID: Date] = [:]
+    private var dockChecks: [CGWindowID: DispatchWorkItem] = [:]
+    private var lastNudge: [CGWindowID: Date] = [:]
     /// Leaving or entering a fullscreen Space makes macOS focus whatever window that app has on the
     /// new Space, often a parked one from another context. That isn't the user asking to switch.
     private var lastSpaceChange = Date.distantPast
@@ -382,6 +387,7 @@ final class WindowEngine {
               let frame = AX.frame(w.element) else { return }
         w.parkedFrame = frame
         windows[id] = w
+        ownMoveUntil[id] = Date().addingTimeInterval(0.8)
         AX.setPosition(w.element, parkCorner(for: frame))
     }
 
@@ -396,6 +402,7 @@ final class WindowEngine {
         guard var w = windows[id], let frame = w.parkedFrame else { return }
         w.parkedFrame = nil
         windows[id] = w
+        ownMoveUntil[id] = Date().addingTimeInterval(0.8)
         AX.setFrame(w.element, onScreen(frame))
     }
 
@@ -458,6 +465,56 @@ final class WindowEngine {
               !seenFullScreen.contains(id), !isTucked(el, parkedFrom: frame) else { return }
         AX.setPosition(el, parkCorner(for: frame))
         note("re-tucked \(w.bundleID) \(id): the app moved it back on screen")
+    }
+
+    // MARK: - Keeping windows out from behind the Dock
+
+    /// Runs shortly after a window stops moving or resizing, and only once the mouse is up.
+    private func scheduleDockCheck(_ el: AXUIElement) {
+        guard let id = AX.windowID(el), windows[id] != nil else { return }
+        dockChecks[id]?.cancel()
+        let item = DispatchWorkItem { [weak self] in self?.keepAboveDock(id) }
+        dockChecks[id] = item
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: item)
+    }
+
+    /// Like the native Dock's reserved strip: a visible window whose bottom ends up behind the Dock
+    /// is shortened (if it reaches the bottom of the screen: maximized, tiled, "Fill") or moved up
+    /// (if it was dragged partway down). Drag it back down within 10s and it's left alone.
+    private func keepAboveDock(_ id: CGWindowID) {
+        dockChecks[id] = nil
+        guard let w = windows[id], w.parkedFrame == nil, w.context == current || isShared(w.bundleID),
+              !AX.isFullScreen(w.element), !AX.isMinimized(w.element),
+              Date() > ownMoveUntil[id] ?? .distantPast,
+              let f = AX.frame(w.element), let screen = NSScreen.main ?? NSScreen.screens.first,
+              screen.axFrame.contains(CGPoint(x: f.midX, y: f.midY)) else { return }
+        if NSEvent.pressedMouseButtons != 0 {
+            // Still dragging; look again shortly.
+            let item = DispatchWorkItem { [weak self] in self?.keepAboveDock(id) }
+            dockChecks[id] = item
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25, execute: item)
+            return
+        }
+        let v = screen.axVisibleFrame
+        let dockTop = v.maxY - DockMetrics.reserved
+        guard f.maxY > dockTop + 1, f.minY < dockTop - 60 else { return }
+        if let last = lastNudge[id], Date().timeIntervalSince(last) < 10 {
+            note("left \(w.bundleID) \(id) behind the Dock: moved back down after a nudge")
+            lastNudge[id] = nil
+            return
+        }
+        ownMoveUntil[id] = Date().addingTimeInterval(0.8)
+        lastNudge[id] = Date()
+        if f.maxY >= v.maxY - 2 || f.height > dockTop - v.minY {
+            // Reaches the bottom (or is too tall to fit): keep the top, shorten it.
+            let top = max(f.minY, v.minY)
+            AX.setPosition(w.element, CGPoint(x: f.minX, y: top))
+            AX.setSize(w.element, CGSize(width: f.width, height: dockTop - top))
+            note("kept \(w.bundleID) \(id) above the Dock (shortened)")
+        } else {
+            AX.setPosition(w.element, CGPoint(x: f.minX, y: dockTop - f.height))
+            note("kept \(w.bundleID) \(id) above the Dock (moved up)")
+        }
     }
 
     // MARK: - Discovery
@@ -698,6 +755,7 @@ final class WindowEngine {
         let refcon = Unmanaged.passUnretained(self).toOpaque()
         AXObserverAddNotification(observer, el, kAXUIElementDestroyedNotification as CFString, refcon)
         AXObserverAddNotification(observer, el, kAXMovedNotification as CFString, refcon)
+        AXObserverAddNotification(observer, el, kAXResizedNotification as CFString, refcon)
         if Self.browsers.contains(bundleID) {
             AXObserverAddNotification(observer, el, kAXTitleChangedNotification as CFString, refcon)
         }
@@ -715,6 +773,9 @@ final class WindowEngine {
             titleChanged(element, pid: pid)
         case kAXMovedNotification:
             windowMoved(element)
+            scheduleDockCheck(element)
+        case kAXResizedNotification:
+            scheduleDockCheck(element)
         default:
             // Decide a moment later, once any Space change behind this focus change has been announced.
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in

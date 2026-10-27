@@ -51,11 +51,16 @@ extension EnvironmentValues {
 }
 
 enum DockMetrics {
-    static let icon: CGFloat = 46
-    static let control: CGFloat = 34
-    static let corner: CGFloat = 24
+    static let icon: CGFloat = 40
+    static let control: CGFloat = 30
+    static let corner: CGFloat = 21
     static let bottomGap: CGFloat = 8
-    static let panelHeight: CGFloat = 132   // room above the bar for the hover label
+    static let padV: CGFloat = 7
+    static let panelHeight: CGFloat = 120   // room above the bar for the hover label
+    /// Bar height: padding, icon, the 3pt gap and the 4pt running dot.
+    static let barHeight: CGFloat = padV * 2 + icon + 3 + 4
+    /// The strip at the bottom of the screen that windows are kept out of (bar, gap below, a little air).
+    static let reserved: CGFloat = bottomGap + barHeight + 6
 }
 
 struct DockView: View {
@@ -85,9 +90,9 @@ struct DockView: View {
             }
             Rectangle()
                 .fill(.white.opacity(0.16))
-                .frame(width: 1, height: 34)
-                .padding(.horizontal, 12)
-            HStack(spacing: 8) {
+                .frame(width: 1, height: 30)
+                .padding(.horizontal, 11)
+            HStack(spacing: 7) {
                 ForEach(Array(state.shownApps.enumerated()), id: \.element.id) { index, app in
                     AppTile(app: app, running: state.running.contains(app.bundleID),
                             open: { state.onOpenApp(app.bundleID) },
@@ -97,9 +102,9 @@ struct DockView: View {
             }
             .frame(minWidth: DockMetrics.icon, alignment: .leading)
         }
-        .padding(.leading, 10)
-        .padding(.trailing, 12)
-        .padding(.vertical, 8)
+        .padding(.leading, 9)
+        .padding(.trailing, 10)
+        .padding(.vertical, DockMetrics.padV)
         .background(Frosted(cornerRadius: DockMetrics.corner))
         .overlay(
             RoundedRectangle(cornerRadius: DockMetrics.corner, style: .continuous)
@@ -123,18 +128,18 @@ private struct ModeButton: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 7) {
-                ContextSymbol(name: context.symbol, size: 14)
+            HStack(spacing: 6) {
+                ContextSymbol(name: context.symbol, size: 12.5)
                 if selected {
                     Text(context.name)
-                        .font(.system(size: 14.5, weight: .semibold))
+                        .font(.system(size: 13, weight: .semibold))
                         .fixedSize()
                         .transition(.asymmetric(insertion: .opacity.animation(.easeOut(duration: 0.14).delay(0.18)),
                                                 removal: .quickExit))
                 }
             }
             .foregroundStyle(selected ? .white : .white.opacity(hover ? 0.9 : 0.55))
-            .padding(.horizontal, selected ? 14 : 0)
+            .padding(.horizontal, selected ? 12 : 0)
             .frame(minWidth: DockMetrics.control, minHeight: DockMetrics.control)
             .background {
                 if selected {
@@ -182,12 +187,12 @@ private struct AppTile: View {
         .overlay(alignment: .top) {
             if hover {
                 Text(app.name)
-                    .font(.system(size: 12.5, weight: .medium))
+                    .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(.white)
                     .padding(.horizontal, 10).padding(.vertical, 4)
                     .background(Frosted(cornerRadius: 12))
                     .fixedSize()
-                    .offset(y: -36)
+                    .offset(y: -32)
                     .transition(.opacity.combined(with: .offset(y: 4)))
                     .allowsHitTesting(false)
             }

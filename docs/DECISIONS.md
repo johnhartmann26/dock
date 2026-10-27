@@ -238,3 +238,13 @@ John confirmed: after a long fullscreen video the Dock shows right away on retur
 
 **Switching to a context skips its fullscreen windows (John).** Clicking Personal sometimes landed on Dia's fullscreen video, not the Personal desktop: that window was Personal's most recent, and focusing it makes macOS jump to its Space. `focusCurrent` now ignores windows with AXFullScreen when choosing what to bring up after a Dock, hotkey or swipe switch. It picks the most recent normal window, or ContextDock takes focus if there's none, so you stay on the desktop. The frame-filling heuristic isn't used here, because a zoomed normal window in the current context also fills the screen.
 John confirmed that clicking Personal with the Dia video fullscreen keeps him on the desktop with his normal windows.
+
+## 2026-10-27: Smaller Dock; windows kept out from behind it
+
+**Size (John: "scale down just a bit"):** about 12% smaller. Icons 46→40pt, context controls 34→30pt, corner 24→21pt, labels 14.5→13pt, symbol 14→12.5pt, and tighter padding. The bar is now about 61pt tall.
+
+**Reserved strip (John: windows go behind it too easily):** the native Dock reserves its strip (`visibleFrame`), but this floating Dock doesn't. Now, 0.35s after a visible window stops moving or resizing, and once the mouse is up, ContextDock checks whether its bottom is behind the Dock: `DockMetrics.reserved`, the bar plus its gap plus 6pt, measured from the bottom of the main screen, across the full width like the native Dock.
+- A window that reaches the bottom of the screen (maximized, tiled, "Fill") or is too tall to fit gets shortened.
+- A window dragged partway down gets moved up.
+- Windows mostly inside the strip, fullscreen, minimized or parked are left alone, as are ContextDock's own park/unpark moves (0.8s ignore).
+- If you drag a window back down within 10s of a nudge, it's treated as deliberate and left there.
