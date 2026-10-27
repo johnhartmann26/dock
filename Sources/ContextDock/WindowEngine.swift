@@ -44,6 +44,9 @@ final class WindowEngine {
     private var linkWatch: [pid_t: Date] = [:]
     private var lastLinkSwitch = Date.distantPast
     private var titles: [CGWindowID: String] = [:]
+    /// Last ⌘-` / ⌘⇧-` press; window cycling stays inside the current context.
+    private var lastCycleKey = Date.distantPast
+    private var keyMonitor: Any?
 
     private static let stateURL = DockConfig.url.deletingLastPathComponent().appendingPathComponent("state.json")
     private static let fallbackNewWindowApps: Set<String> = [
@@ -97,6 +100,12 @@ final class WindowEngine {
         }
         NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.reassert("displays changed") }
+        }
+
+        // Global key monitors need the Accessibility grant we already have; this only watches for ⌘-`.
+        keyMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] e in
+            guard e.keyCode == 50, e.modifierFlags.contains(.command) else { return }
+            MainActor.assumeIsolated { self?.lastCycleKey = Date() }
         }
 
         for app in NSWorkspace.shared.runningApplications where manages(app) {
@@ -201,7 +210,11 @@ final class WindowEngine {
         }
 
         let elsewhere = windows.values.filter { $0.bundleID == bundleID }.sorted { $0.lastFocus > $1.lastFocus }
-        if elsewhere.isEmpty || newWindowApps.contains(bundleID) {
+        if elsewhere.isEmpty {
+            // Running with no windows: do what the native Dock does (a reopen event shows the main
+            // window). ⌘N here would mean "new message" in Mimestream or Messages.
+            launch(bundleID)
+        } else if newWindowApps.contains(bundleID) {
             newWindow(in: running)
         } else if let w = elsewhere.first {
             // A single-window app: bring its window to this context.
@@ -210,6 +223,16 @@ final class WindowEngine {
         }
     }
 
+    /// Right-click > New Window Here: always a fresh window in the current context.
+    func newWindowHere(_ bundleID: String) {
+        if let running = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).first {
+            newWindow(in: running)
+        } else {
+            launch(bundleID)
+        }
+    }
+
+    /// Launches the app, or for a running one sends the reopen event a native Dock click sends.
     private func launch(_ bundleID: String) {
         guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else { return }
         awaitingWindow = (bundleID, Date().addingTimeInterval(8))
@@ -430,10 +453,26 @@ final class WindowEngine {
             if w.context == current { windows[id]?.lastFocus = Date() }
             return
         }
-        windows[id]?.lastFocus = Date()
         if w.context != current && !isShared(w.bundleID) {
+            if Date().timeIntervalSince(lastCycleKey) < 0.6, let next = nextWindowInContext(pid: pid) {
+                // ⌘-` landed on a parked window: cycle to this app's next window here instead.
+                ignoreFocusUntil = Date().addingTimeInterval(0.3)
+                note("⌘-` kept in \(current): \(w.bundleID) \(id) -> \(next)")
+                focus(next)
+                return
+            }
+            windows[id]?.lastFocus = Date()
             switchTo(w.context, focusing: id, reason: "focus-follow \(w.bundleID) \(id)")
+        } else {
+            windows[id]?.lastFocus = Date()
         }
+    }
+
+    /// The app's least recently used window in the current context, so repeated ⌘-` goes round them.
+    private func nextWindowInContext(pid: pid_t) -> CGWindowID? {
+        windows.values
+            .filter { $0.pid == pid && $0.context == current && !AX.isMinimized($0.element) }
+            .min { $0.lastFocus < $1.lastFocus }?.id
     }
 
     // MARK: - Links landing in parked browser windows

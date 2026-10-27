@@ -28,17 +28,20 @@ On first launch, approve **ContextDock** in System Settings > Privacy & Security
 - If it has a window in this context, that window comes up.
 - If the app is a browser, editor or terminal with windows only in other contexts, ContextDock sends ⌘N and the new window joins this context.
 - If it's a single-window app (Slack, Discord), its window moves here.
+- If the app is running with no windows (Mimestream, Messages), it gets the native Dock's "reopen", so its main window shows here.
 - If the app isn't running, it launches here.
 
 **Where new windows go:** new windows join the current context.
 
-**What follows focus:** if a window from another context comes forward, the Dock switches to that context. That covers ⌘-Tab, ⌘-`, clicking the native Dock, notifications, and links that land in an existing window.
+**⌘-`** cycles only the current context's windows of the front app.
+
+**What follows focus:** if a window from another context comes forward, the Dock switches to that context. That covers ⌘-Tab, clicking the native Dock, notifications, and links that land in an existing window.
 
 **Shared apps:** windows of the apps in `shared` stay visible in every context (Music, 1Password and Finder by default).
 
 **Editing contexts:** menu bar > Edit Dock Contents… opens `~/Library/Application Support/ContextDock/config.json` (contexts, Dock apps by bundle id, colours, keys, `shared`). Relaunch to apply.
 
-**Automation:** `open -g contextdock://switch/work`, `contextdock://move-front/personal`, `contextdock://open/<bundle id>`, `contextdock://recover`, `contextdock://dump` (writes `debug.json` next to the state).
+**Automation:** `open -g contextdock://switch/work`, `contextdock://move-front/personal`, `contextdock://open/<bundle id>`, `contextdock://new-window/<bundle id>`, `contextdock://recover`, `contextdock://dump` (writes `debug.json` next to the state).
 
 ## What happens if it dies
 

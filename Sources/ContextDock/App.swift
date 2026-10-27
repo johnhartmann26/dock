@@ -74,6 +74,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             case "switch": engine.switchTo(arg, reason: "url")
             case "move-front": engine.moveFocusedWindow(to: arg)
             case "open": engine.openApp(arg)
+            case "new-window": engine.newWindowHere(arg)
             case "recover": recover()
             case "dump": engine.dump()
             default: break
@@ -169,7 +170,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func switchFromMenu(_ sender: NSMenuItem) { engine.switchTo(sender.representedObject as! String, reason: "menu") }
     @objc private func moveFromMenu(_ sender: NSMenuItem) { engine.moveFocusedWindow(to: sender.representedObject as! String) }
     @objc private func focusWindow(_ sender: NSMenuItem) { engine.focus(sender.representedObject as! CGWindowID) }
-    @objc private func openApp(_ sender: NSMenuItem) { engine.openApp(sender.representedObject as! String) }
+    @objc private func openApp(_ sender: NSMenuItem) { engine.newWindowHere(sender.representedObject as! String) }
     @objc private func moveWindow(_ sender: NSMenuItem) {
         let pair = sender.representedObject as! [Any]
         engine.move(pair[0] as! CGWindowID, to: pair[1] as! String)

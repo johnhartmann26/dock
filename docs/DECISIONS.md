@@ -108,3 +108,15 @@ ContextDock didn't run a pass, because it only listened for system wake at the t
 **Real system sleep: not applicable on John's Mac.** It never system-sleeps, because an app he runs keeps it awake. `pmset sleepnow` was also refused from the Claude session (0xe00002e2, not permitted). The case that happens day to day is the lid closing (display off plus lock), which passed above and now also triggers the re-pin pass. The system-wake handler stays in place for other setups but hasn't been tested here.
 
 **Still open:** a display plug/unplug.
+
+## 2026-10-27: ⌘-`, notification clicks, reopening apps with no windows
+
+**⌘-` stays inside the context (judgment call, flagged to John once).** A global key monitor records ⌘-` and ⌘⇧-` presses. If the focus change that follows lands on a parked window from another context, ContextDock focuses the app's least recently used window in the current context. That cycles round the current context's windows instead of jumping contexts. ⌘-Tab, notification clicks and links still follow the window to its context.
+
+Tested by John in Dia, with one Dia window in Work and one in Personal. The switch log shows each press landing on the parked window and being sent back (`⌘-\` kept in work … 744183 -> 707239` ×3, and the same in Personal ×4). With one window per context that looks like "⌘-` does nothing", which is the intended outcome. John doesn't use ⌘-`. Cycling between two windows in one context hasn't been tested, because the second Work Dia window was closed before the test.
+
+**Notification clicks follow to the window's context: verified by John.** A Messages notification clicked while in Agents produced `agents -> personal: focus-follow com.apple.MobileSMS 744478`. A notification click activates the app like ⌘-Tab does, so it goes through the same focus-follow path.
+
+**Bug fixed: clicking a running app that has no windows.** Clicking Mimestream in the Work Dock (Mimestream running, no windows) sent ⌘N, which in Mimestream and Messages creates a new draft instead of showing the main window. Now an app that's running with no windows gets the same reopen event the native Dock sends (`NSWorkspace.openApplication`). ⌘N is used only for multi-window apps (browsers, editors, terminals, Finder) that have windows in other contexts. Verified: Mimestream from the Work Dock showed its Inbox window in Work, focused. The window had an old id (411348), so Mimestream had kept it ordered out, and it was adopted into Work.
+
+**Also fixed:** right-click > New Window Here focused an existing window when there was one; it now always opens a new window. `contextdock://new-window/<bundle id>` does the same.
