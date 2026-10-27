@@ -23,10 +23,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var signalSources: [DispatchSourceSignal] = []
     private var trustTimer: Timer?
     private var swipeMonitor: Any?
+    /// Held for the app's lifetime: with the Dock hidden (a long fullscreen video) ContextDock has no
+    /// visible window, and App Nap would then delay the events and timers it reacts to.
+    private var noNap: NSObjectProtocol?
     private var swipeDistance: CGFloat = 0
     private var swipeUsed = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        noNap = ProcessInfo.processInfo.beginActivity(options: [.userInitiatedAllowingIdleSystemSleep, .latencyCritical],
+                                                       reason: "Switching windows between contexts")
         let config = DockConfig.load()
         engine = WindowEngine(config: config)
         state = DockState(config: config, current: engine.current)
