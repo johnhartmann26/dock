@@ -53,6 +53,9 @@ final class WindowEngine {
     private var demoActive = false
     /// When each app last got a new window, so an activation that opens one doesn't pull you away.
     private var lastAdoptAt: [pid_t: Date] = [:]
+    /// Leaving or entering a fullscreen Space makes macOS focus whatever window that app has on the
+    /// new Space, often a parked one from another context. That isn't the user asking to switch.
+    private var lastSpaceChange = Date.distantPast
 
     /// Your own windows tucked away by demo mode: Dock clicks and running dots ignore them.
     private func demoHidden(_ id: CGWindowID) -> Bool { demoActive && demoMinimized.contains(id) }
@@ -93,6 +96,18 @@ final class WindowEngine {
         nc.addObserver(forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main) { [weak self] n in
             guard let app = n.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication else { return }
             MainActor.assumeIsolated { self?.appActivated(app) }
+        }
+        nc.addObserver(forName: NSWorkspace.activeSpaceDidChangeNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.lastSpaceChange = Date()
+                // AX only shows the current Space's windows, so look again for ones we haven't met
+                // (they get their saved context), and re-pin parked windows once the Space settles:
+                // moves made while another Space was showing don't always stick.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    self?.rescan()
+                    self?.reassert("space changed")
+                }
+            }
         }
         nc.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.reassert("wake") }
@@ -393,6 +408,13 @@ final class WindowEngine {
         changed()
     }
 
+    private func rescan() {
+        for app in NSWorkspace.shared.runningApplications where manages(app) {
+            observe(app)
+            scan(app)
+        }
+    }
+
     private func scan(_ app: NSRunningApplication) {
         let pid = app.processIdentifier
         for el in AX.windows(of: AX.app(pid)) { adopt(el, pid: pid) }
@@ -437,10 +459,13 @@ final class WindowEngine {
         return true
     }
 
+    /// Drops windows that are really closed. AX only lists windows on the current Space, so a window
+    /// missing from it might just be on another Space (a fullscreen one, another desktop); the window
+    /// server sees every Space and decides.
     private func prune(_ pid: pid_t) {
         let alive = Set(AX.windows(of: AX.app(pid)).compactMap(AX.windowID))
         let before = windows.count
-        windows = windows.filter { $0.value.pid != pid || alive.contains($0.key) }
+        windows = windows.filter { $0.value.pid != pid || alive.contains($0.key) || AX.windowExists($0.key) }
         if windows.count != before { persist(); changed() }
     }
 
@@ -465,6 +490,15 @@ final class WindowEngine {
             return
         }
         if w.context != current && !isShared(w.bundleID) {
+            if Date().timeIntervalSince(lastSpaceChange) < 1.0 {
+                // macOS picked this window because the Space changed. Stay in this context, and take
+                // keyboard focus off the parked window without focusing another window, which could
+                // pull you back to a different Space mid-swipe.
+                note("space change: stayed in \(current), not following \(w.bundleID) \(id)")
+                ignoreFocusUntil = Date().addingTimeInterval(0.4)
+                AX.set(AX.app(getpid()), kAXFrontmostAttribute, kCFBooleanTrue)
+                return
+            }
             if Date().timeIntervalSince(lastCycleKey) < 0.6, let next = nextWindowInContext(pid: pid) {
                 // ⌘-` landed on a parked window: cycle to this app's next window here instead.
                 ignoreFocusUntil = Date().addingTimeInterval(0.3)
@@ -567,7 +601,11 @@ final class WindowEngine {
         case kAXTitleChangedNotification:
             titleChanged(element, pid: pid)
         default:
-            if NSWorkspace.shared.frontmostApplication?.processIdentifier == pid { focusChanged(pid: pid) }
+            // Decide a moment later, once any Space change behind this focus change has been announced.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
+                guard NSWorkspace.shared.frontmostApplication?.processIdentifier == pid else { return }
+                self?.focusChanged(pid: pid)
+            }
         }
     }
 

@@ -81,8 +81,14 @@ enum AX {
         let subrole: String? = get(el, kAXSubroleAttribute)
         guard role == kAXWindowRole, subrole == kAXStandardWindowSubrole || subrole == kAXDialogSubrole else { return false }
         if let id = windowID(el), let level = windowLevel(id), level != 0 { return false }
-        if let f = frame(el), f.width < 80 || f.height < 80 { return false }
+        guard let f = frame(el), f.width >= 80, f.height >= 80 else { return false }
         return true
+    }
+
+    /// Whether the window server still has this window, on any Space.
+    static func windowExists(_ id: CGWindowID) -> Bool {
+        let info = CGWindowListCopyWindowInfo([.optionIncludingWindow], id) as? [[String: Any]]
+        return !(info?.isEmpty ?? true)
     }
 
     /// The window server layer (0 = normal windows; floating panels and overlays sit higher).
