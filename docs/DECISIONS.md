@@ -149,3 +149,16 @@ John decided not to record the demo, so that deliverable from the brief isn't pr
 **Not a bug:** two `work -> agents: dock` switches during setup were John clicking Agents.
 
 **Seen once, not investigated:** after demo start, Discord's window was visible in Personal. It either didn't minimize or restored itself (Electron).
+
+## 2026-10-27: Calmer switch animation; Personal first
+
+**John: the switch felt like the Dock "fully closing and reopening".** The video-style sequence was too much day to day: clear every icon, shrink the bar to the context buttons, then cascade the new icons in. That's a deliberate departure from the reference. Now:
+- the bar stays open and glides to its new width, all on one `.smooth(duration: 0.32)` curve with no bounce;
+- old icons fade and settle slightly in place (0.14s) while new ones fade and rise in a beat later, with an 18ms stagger;
+- apps that are in both contexts keep their tile, because tiles are keyed by bundle id;
+- the pill slides drawn above the other buttons (`zIndex`), so the Work briefcase no longer shows through it;
+- the label fades in at 0.18s, once the pill has nearly arrived.
+
+Checked with window-only captures of the gallery (`screencapture -l` in a loop). A region recording earlier caught one of John's windows (Meet call controls) sitting over the gallery and was deleted. Only window-only captures are used for this from now on.
+
+**Order is Personal, Work, Agents** (John). John had already swapped the shortcuts in his config.json (Personal ⌃⌥1, Work ⌃⌥2) and moved Music from shared into Personal. Only the order of the `contexts` array changed in his file. The defaults and the app icon (amber dot, blue Work pill, violet dot) follow the same order.

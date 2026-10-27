@@ -66,7 +66,7 @@ func draw(size px: Int) -> NSBitmapImageRep {
     tile.lineWidth = 3
     tile.stroke()
 
-    // The Dock: a frosted bar with the selected Work pill, two quiet context buttons, a divider, an app.
+    // The Dock: a frosted bar with the three contexts (Work selected), a divider, an app.
     // Sized to stay readable at 16-32px.
     let unit: CGFloat = 112
     let gap: CGFloat = 14
@@ -93,7 +93,17 @@ func draw(size px: Int) -> NSBitmapImageRep {
     let cy = bar.midY
     var x = bar.minX + pad
 
-    // Selected context: the Work pill, with a short white "label" line.
+    // Contexts in Dock order: Personal (quiet circle), Work (the selected pill), Agents (quiet circle).
+    func quietCircle(_ hex: String) {
+        let c = CGRect(x: x, y: cy - unit / 2, width: unit, height: unit)
+        color("#FFFFFF", 0.12).setFill()
+        NSBezierPath(ovalIn: c).fill()
+        color(hex).setFill()
+        NSBezierPath(ovalIn: c.insetBy(dx: 36, dy: 36)).fill()
+        x += unit + gap
+    }
+    quietCircle("#CF8812")
+
     let pill = CGRect(x: x, y: cy - unit / 2, width: pillW, height: unit)
     color("#3277BB").setFill()
     rounded(pill, unit / 2).fill()
@@ -102,15 +112,7 @@ func draw(size px: Int) -> NSBitmapImageRep {
     rounded(CGRect(x: pill.minX + 92, y: cy - 10, width: 92, height: 20), 10).fill()         // label
     x += pillW + gap
 
-    // The other contexts: quiet circles with a dot of their colour.
-    for hex in ["#CF8812", "#7B5CC4"] {
-        let c = CGRect(x: x, y: cy - unit / 2, width: unit, height: unit)
-        color("#FFFFFF", 0.12).setFill()
-        NSBezierPath(ovalIn: c).fill()
-        color(hex).setFill()
-        NSBezierPath(ovalIn: c.insetBy(dx: 36, dy: 36)).fill()
-        x += unit + gap
-    }
+    quietCircle("#7B5CC4")
     x -= gap
 
     // Divider.

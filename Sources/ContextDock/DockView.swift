@@ -6,14 +6,12 @@ final class DockState: ObservableObject {
     @Published var config: DockConfig
     @Published var current: String
     @Published var running: Set<String> = []
-    /// Apps shown for `current`, filled one by one so a switch cascades in like the reference video.
+    /// Apps shown for `current`.
     @Published var shownApps: [DockApp] = []
 
     var onSelect: (String) -> Void = { _ in }
     var onOpenApp: (String) -> Void = { _ in }
     var onMenuForApp: (String) -> NSMenu? = { _ in nil }
-
-    private var cascade: Task<Void, Never>?
 
     init(config: DockConfig, current: String) {
         self.config = config
@@ -28,24 +26,17 @@ final class DockState: ObservableObject {
     }
 
     /// Called by the engine after a switch, from whatever source (Dock, hotkey, focus).
+    /// The bar stays open: icons cross-fade in place and the bar glides to its new width.
+    /// Apps that are in both contexts (Dia in Work and Personal) keep their tile.
     func show(_ id: String) {
         guard id != current else { return }
-        current = id
-        let target = Self.apps(for: id, in: config)
-        cascade?.cancel()
-        withAnimation(.easeOut(duration: 0.07)) { shownApps = [] }
-        cascade = Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(60))
-            for app in target {
-                guard !Task.isCancelled else { return }
-                withAnimation(.spring(response: 0.2, dampingFraction: 0.8)) { shownApps.append(app) }
-                try? await Task.sleep(for: .milliseconds(18))
-            }
+        withAnimation(DockMotion.switch) {
+            current = id
+            shownApps = Self.apps(for: id, in: config)
         }
     }
 
     func reloadApps() {
-        cascade?.cancel()
         shownApps = Self.apps(for: current, in: config)
     }
 }
@@ -88,6 +79,8 @@ struct DockView: View {
                     ModeButton(context: ctx, selected: ctx.id == state.current, namespace: pill) {
                         state.onSelect(ctx.id)
                     }
+                    // The sliding pill belongs to the selected button; keep it above the buttons it passes.
+                    .zIndex(ctx.id == state.current ? 1 : 0)
                 }
             }
             Rectangle()
@@ -95,13 +88,11 @@ struct DockView: View {
                 .frame(width: 1, height: 34)
                 .padding(.horizontal, 12)
             HStack(spacing: 8) {
-                ForEach(state.shownApps) { app in
+                ForEach(Array(state.shownApps.enumerated()), id: \.element.id) { index, app in
                     AppTile(app: app, running: state.running.contains(app.bundleID),
                             open: { state.onOpenApp(app.bundleID) },
                             menu: { state.onMenuForApp(app.bundleID) })
-                        .transition(.asymmetric(
-                            insertion: .scale(scale: 0.55).combined(with: .opacity),
-                            removal: .quickExit))
+                        .transition(.asymmetric(insertion: .tileIn(index), removal: .tileOut))
                 }
             }
             .frame(minWidth: DockMetrics.icon, alignment: .leading)
@@ -115,8 +106,7 @@ struct DockView: View {
                 .strokeBorder(.white.opacity(0.10), lineWidth: 0.5)
         )
         .shadow(color: .black.opacity(0.28), radius: 18, y: 8)
-        .animation(.spring(response: 0.24, dampingFraction: 0.86), value: state.current)
-        .animation(.spring(response: 0.22, dampingFraction: 0.88), value: state.shownApps.count)
+        .animation(DockMotion.switch, value: state.current)
     }
 }
 
@@ -140,7 +130,7 @@ private struct ModeButton: View {
                     Text(context.name)
                         .font(.system(size: 14.5, weight: .semibold))
                         .fixedSize()
-                        .transition(.asymmetric(insertion: .opacity.animation(.easeOut(duration: 0.12).delay(0.11)),
+                        .transition(.asymmetric(insertion: .opacity.animation(.easeOut(duration: 0.14).delay(0.18)),
                                                 removal: .quickExit))
                 }
             }
@@ -249,7 +239,27 @@ struct Frosted: NSViewRepresentable {
     }
 }
 
+/// One curve for the whole switch: quick to start, settles softly, no bounce.
+enum DockMotion {
+    static let `switch` = Animation.smooth(duration: 0.32)
+}
+
 extension AnyTransition {
+    /// New icon: fades and rises in a beat after the old one starts leaving, staggered left to right.
+    static func tileIn(_ index: Int) -> AnyTransition {
+        AnyTransition.opacity
+            .combined(with: .scale(scale: 0.88, anchor: .bottom))
+            .combined(with: .offset(y: 4))
+            .animation(.smooth(duration: 0.26).delay(0.06 + Double(index) * 0.018))
+    }
+
+    /// Old icon: fades and settles down slightly where it stands.
+    static var tileOut: AnyTransition {
+        AnyTransition.opacity
+            .combined(with: .scale(scale: 0.92, anchor: .bottom))
+            .animation(.easeOut(duration: 0.14))
+    }
+
     /// Gone in 50ms regardless of the surrounding animation. `.identity` would keep a removed view
     /// fully visible until the whole switch animation finishes.
     static var quickExit: AnyTransition { .opacity.animation(.easeOut(duration: 0.05)) }

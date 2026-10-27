@@ -20,13 +20,13 @@ struct DockConfig: Codable {
 
     static let fallback = DockConfig(
         contexts: [
-            DockContext(id: "work", name: "Work", symbol: "briefcase.fill", color: "#3277BB",
-                        apps: ["company.thebrowser.dia", "com.mimestream.Mimestream", "com.tinyspeck.slackmacgap",
-                               "com.granola.app", "com.flexibits.fantastical2.mac"],
-                        key: "1"),
             DockContext(id: "personal", name: "Personal", symbol: "house.fill", color: "#CF8812",
                         apps: ["company.thebrowser.dia", "com.apple.MobileSMS", "com.culturedcode.ThingsMac",
                                "com.apple.Notes", "com.hnc.Discord"],
+                        key: "1"),
+            DockContext(id: "work", name: "Work", symbol: "briefcase.fill", color: "#3277BB",
+                        apps: ["company.thebrowser.dia", "com.mimestream.Mimestream", "com.tinyspeck.slackmacgap",
+                               "com.granola.app", "com.flexibits.fantastical2.mac"],
                         key: "2"),
             DockContext(id: "agents", name: "Agents", symbol: "sparkles", color: "#7B5CC4",
                         apps: ["com.anthropic.claudefordesktop", "com.openai.codex", "dev.serafim.fast",
