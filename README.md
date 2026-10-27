@@ -7,9 +7,10 @@ A floating Dock with three contexts (Work, Personal, Agents). Each context has i
 Requires macOS 26 and Xcode 26 or later (Swift 6). No other dependencies.
 
 ```bash
-./scripts/build-app.sh
-open build/ContextDock.app
+./scripts/install.sh
 ```
+
+This builds the app, quits the running copy (your windows are put back first), installs it to `/Applications/ContextDock.app` and launches it. Run it again after any change. `./scripts/build-app.sh` alone only builds `build/ContextDock.app`.
 
 On first launch, approve **ContextDock** in System Settings > Privacy & Security > Accessibility. It starts within a second of the grant. The build signs with your first "Apple Development" certificate so the grant survives rebuilds. Set `CODESIGN_IDENTITY` to pick a different one.
 
@@ -45,7 +46,7 @@ On first launch, approve **ContextDock** in System Settings > Privacy & Security
 
 ## Design review
 
-`build/ContextDock.app/Contents/MacOS/ContextDock --gallery` opens a window with every Dock state, forced hover states and a Dock that switches every 1.6s. It doesn't touch your windows.
+`/Applications/ContextDock.app/Contents/MacOS/ContextDock --gallery` opens a window with every Dock state, forced hover states and a Dock that switches every 1.6s. It doesn't touch your windows.
 
 ## What happens if it dies
 
