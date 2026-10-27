@@ -191,4 +191,6 @@ John's config: Personal's Dock has Safari where Dia was. Homes are Safari → pe
 - From Work, a link in Safari landed as a tab in the existing, parked Personal Safari window: `work -> personal: link-landed com.apple.Safari 745928`.
 - From Personal, a link in Yab opened a new window: `personal -> agents: home dev.serafim.fast 746109`.
 
+John then clicked real links through Velja, and each one took him to the right context.
+
 With one browser per context, the Dia link-routing problem from earlier (a tab landing in another context's Dia window) mostly goes away.
