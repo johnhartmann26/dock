@@ -87,3 +87,22 @@ Every switch now records its reason (dock, hotkey, url, menu, focus-follow, link
 ## 2026-10-27: Signing is pinned
 
 Keychain listed John's two Apple Development certificates in a different order on a later build. That signed the app with the other certificate, and the Accessibility grant stopped applying. `scripts/build-app.sh` now saves the first certificate's SHA-1 in `.signing-identity` (gitignored) and reuses it on every build.
+
+## 2026-10-27: Sleep/wake, first pass
+
+**Change.** The wake pass no longer un-parks windows to re-measure them, which would have flashed every hidden window at wake. It now pins parked windows back to their corner, using the screen of their saved frame, or the main screen if that screen is gone, and only touches windows that moved. It runs on:
+- system wake, and again 2s later;
+- display wake;
+- session becoming active (unlock, fast user switching);
+- display configuration changes.
+
+Each pass is recorded in `recentSwitches` as "<why>: N parked, M re-pinned".
+
+**Lid test (John, 15:11 local):** the Mac did **not** system-sleep. `pmset -g log` shows only "Display is turned off" (15:11:39) and "on" (15:12:09). `pmset -g` reports "sleep prevented by Claude, powerd, ChatGPT": the Electron apps hold NoIdleSleep assertions. Through the display-off and lock:
+- all 6 parked windows stayed in the corner with correct saved frames;
+- the 3 visible windows kept their exact frames;
+- the Dock panel stayed at (0, 1037, 1800×132).
+
+ContextDock didn't run a pass, because it only listened for system wake at the time. The display-wake and unlock hooks were added after this test.
+
+**Still open:** a real system sleep (`pmset sleepnow`) and a display plug/unplug.

@@ -83,10 +83,20 @@ final class WindowEngine {
             MainActor.assumeIsolated { self?.appActivated(app) }
         }
         nc.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.reassert() }
+            MainActor.assumeIsolated { self?.reassert("wake") }
+            // Apps and the window server settle for a moment after wake; check again.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) { self?.reassert("wake+2s") }
+        }
+        // Lid closed with sleep held off (Electron apps often do this) only sleeps the displays, and
+        // unlocking or fast user switching never sends didWake; re-pin on those too.
+        for (name, why) in [(NSWorkspace.screensDidWakeNotification, "displays woke"),
+                            (NSWorkspace.sessionDidBecomeActiveNotification, "session active")] {
+            nc.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.reassert(why) }
+            }
         }
         NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.reassert() }
+            MainActor.assumeIsolated { self?.reassert("displays changed") }
         }
 
         for app in NSWorkspace.shared.runningApplications where manages(app) {
@@ -109,8 +119,13 @@ final class WindowEngine {
 
     // MARK: - Switching
 
-    /// The last few switches and why, for `contextdock://dump`.
+    /// The last few switches (and wake/display passes) and why, for `contextdock://dump`.
     private var recentSwitches: [String] = []
+
+    private func note(_ event: String) {
+        recentSwitches.append("\(Date().formatted(.iso8601.time(includingFractionalSeconds: true))) \(event)")
+        recentSwitches = Array(recentSwitches.suffix(20))
+    }
 
     func switchTo(_ target: String, focusing preferred: CGWindowID? = nil, reason: String = "dock") {
         guard config.contexts.contains(where: { $0.id == target }) else { return }
@@ -120,8 +135,7 @@ final class WindowEngine {
         }
         noteFocusedWindow()
         ignoreFocusUntil = Date().addingTimeInterval(0.45)
-        recentSwitches.append("\(Date().formatted(.iso8601.time(includingFractionalSeconds: true))) \(current) -> \(target): \(reason)")
-        recentSwitches = Array(recentSwitches.suffix(20))
+        note("\(current) -> \(target): \(reason)")
         current = target
         applyVisibility()
         focusCurrent(preferring: preferred)
@@ -261,11 +275,16 @@ final class WindowEngine {
         guard var w = windows[id], w.parkedFrame == nil,
               !AX.isMinimized(w.element), !AX.isFullScreen(w.element),
               let frame = AX.frame(w.element) else { return }
-        let screen = NSScreen.containing(axPoint: CGPoint(x: frame.midX, y: frame.midY)) ?? NSScreen.main ?? NSScreen.screens[0]
-        let v = screen.axVisibleFrame
         w.parkedFrame = frame
         windows[id] = w
-        AX.setPosition(w.element, CGPoint(x: v.maxX - 1, y: v.maxY - 1))
+        AX.setPosition(w.element, parkCorner(for: frame))
+    }
+
+    /// Bottom-right of the visible area of the screen the window came from (or the main screen if that one is gone).
+    private func parkCorner(for frame: CGRect) -> CGPoint {
+        let screen = NSScreen.containing(axPoint: CGPoint(x: frame.midX, y: frame.midY)) ?? NSScreen.main ?? NSScreen.screens[0]
+        let v = screen.axVisibleFrame
+        return CGPoint(x: v.maxX - 1, y: v.maxY - 1)
     }
 
     private func unpark(_ id: CGWindowID) {
@@ -301,17 +320,22 @@ final class WindowEngine {
         }
     }
 
-    /// After wake or a display change, re-park anything an app pulled back and re-anchor corners.
-    private func reassert() {
-        for (id, w) in windows where w.parkedFrame != nil {
+    /// After wake or a display change: pin parked windows back to their (possibly new) corner without
+    /// showing them, and pull anything back that an app or macOS moved out of its corner.
+    private func reassert(_ why: String) {
+        var parked = 0, moved = 0
+        for w in windows.values {
             guard let frame = w.parkedFrame else { continue }
-            var copy = w
-            copy.parkedFrame = nil
-            windows[id] = copy
-            AX.setFrame(w.element, frame)      // back to its spot so park() measures the right screen
-            park(id)
+            parked += 1
+            let corner = parkCorner(for: frame)
+            if let now = AX.frame(w.element)?.origin, abs(now.x - corner.x) > 2 || abs(now.y - corner.y) > 2 {
+                moved += 1
+                AX.setPosition(w.element, corner)
+            }
         }
         applyVisibility()
+        note("\(why): \(parked) parked, \(moved) re-pinned")
+        persist()
         changed()
     }
 
