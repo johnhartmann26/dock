@@ -7,7 +7,8 @@ import SwiftUI
 final class AppDelegate: NSObject, NSApplicationDelegate {
     static func main() {
         let app = NSApplication.shared
-        let delegate = AppDelegate()
+        // --gallery: a design-review window only (no engine, no panel, no menu bar item).
+        let delegate: NSApplicationDelegate = CommandLine.arguments.contains("--gallery") ? GalleryDelegate() : AppDelegate()
         app.delegate = delegate
         app.setActivationPolicy(.accessory)
         app.run()

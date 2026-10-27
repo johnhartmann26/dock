@@ -33,13 +33,13 @@ final class DockState: ObservableObject {
         current = id
         let target = Self.apps(for: id, in: config)
         cascade?.cancel()
-        withAnimation(.easeOut(duration: 0.12)) { shownApps = [] }
+        withAnimation(.easeOut(duration: 0.07)) { shownApps = [] }
         cascade = Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(110))
+            try? await Task.sleep(for: .milliseconds(60))
             for app in target {
                 guard !Task.isCancelled else { return }
-                withAnimation(.spring(response: 0.28, dampingFraction: 0.78)) { shownApps.append(app) }
-                try? await Task.sleep(for: .milliseconds(28))
+                withAnimation(.spring(response: 0.2, dampingFraction: 0.8)) { shownApps.append(app) }
+                try? await Task.sleep(for: .milliseconds(18))
             }
         }
     }
@@ -47,6 +47,15 @@ final class DockState: ObservableObject {
     func reloadApps() {
         cascade?.cancel()
         shownApps = Self.apps(for: current, in: config)
+    }
+}
+
+/// Lets the gallery show hover states without a mouse.
+private struct ForcedHoverKey: EnvironmentKey { static let defaultValue: String? = nil }
+extension EnvironmentValues {
+    var forcedHover: String? {
+        get { self[ForcedHoverKey.self] }
+        set { self[ForcedHoverKey.self] = newValue }
     }
 }
 
@@ -92,7 +101,7 @@ struct DockView: View {
                             menu: { state.onMenuForApp(app.bundleID) })
                         .transition(.asymmetric(
                             insertion: .scale(scale: 0.55).combined(with: .opacity),
-                            removal: .opacity))
+                            removal: .quickExit))
                 }
             }
             .frame(minWidth: DockMetrics.icon, alignment: .leading)
@@ -100,14 +109,14 @@ struct DockView: View {
         .padding(.leading, 10)
         .padding(.trailing, 12)
         .padding(.vertical, 8)
-        .glassEffect(.regular.tint(.black.opacity(0.22)), in: .rect(cornerRadius: DockMetrics.corner, style: .continuous))
+        .background(Frosted(cornerRadius: DockMetrics.corner))
         .overlay(
             RoundedRectangle(cornerRadius: DockMetrics.corner, style: .continuous)
                 .strokeBorder(.white.opacity(0.10), lineWidth: 0.5)
         )
         .shadow(color: .black.opacity(0.28), radius: 18, y: 8)
-        .animation(.spring(response: 0.32, dampingFraction: 0.82), value: state.current)
-        .animation(.spring(response: 0.28, dampingFraction: 0.85), value: state.shownApps.count)
+        .animation(.spring(response: 0.24, dampingFraction: 0.86), value: state.current)
+        .animation(.spring(response: 0.22, dampingFraction: 0.88), value: state.shownApps.count)
     }
 }
 
@@ -117,8 +126,10 @@ private struct ModeButton: View {
     let selected: Bool
     let namespace: Namespace.ID
     let action: () -> Void
-    @State private var hover = false
+    @State private var mouseOver = false
     @State private var pressed = false
+    @Environment(\.forcedHover) private var forced
+    private var hover: Bool { mouseOver || forced == context.id }
 
     var body: some View {
         Button(action: action) {
@@ -129,7 +140,8 @@ private struct ModeButton: View {
                     Text(context.name)
                         .font(.system(size: 14.5, weight: .semibold))
                         .fixedSize()
-                        .transition(.opacity.combined(with: .scale(scale: 0.9, anchor: .leading)))
+                        .transition(.asymmetric(insertion: .opacity.animation(.easeOut(duration: 0.12).delay(0.11)),
+                                                removal: .quickExit))
                 }
             }
             .foregroundStyle(selected ? .white : .white.opacity(hover ? 0.9 : 0.55))
@@ -137,9 +149,10 @@ private struct ModeButton: View {
             .frame(minWidth: DockMetrics.control, minHeight: DockMetrics.control)
             .background {
                 if selected {
-                    Capsule().fill(context.tint.gradient)
+                    Capsule().fill(context.tint)
                         .matchedGeometryEffect(id: "pill", in: namespace)
-                        .shadow(color: context.tint.opacity(0.45), radius: 8, y: 2)
+                        // Arrive solid and slide; the old pill just drops out (no orange/purple cross-fade).
+                        .transition(.asymmetric(insertion: .identity, removal: .quickExit))
                 } else {
                     Circle().fill(.white.opacity(hover ? 0.16 : 0.07))
                 }
@@ -148,7 +161,7 @@ private struct ModeButton: View {
             .scaleEffect(pressed ? 0.94 : 1)
         }
         .buttonStyle(.plain)
-        .onHover { h in withAnimation(.easeOut(duration: 0.12)) { hover = h } }
+        .onHover { h in withAnimation(.easeOut(duration: 0.12)) { mouseOver = h } }
         .simultaneousGesture(DragGesture(minimumDistance: 0)
             .onChanged { _ in withAnimation(.easeOut(duration: 0.08)) { pressed = true } }
             .onEnded { _ in withAnimation(.spring(response: 0.25)) { pressed = false } })
@@ -161,7 +174,9 @@ private struct AppTile: View {
     let running: Bool
     let open: () -> Void
     let menu: () -> NSMenu?
-    @State private var hover = false
+    @State private var mouseOver = false
+    @Environment(\.forcedHover) private var forced
+    private var hover: Bool { mouseOver || forced == app.bundleID }
 
     var body: some View {
         VStack(spacing: 3) {
@@ -181,7 +196,7 @@ private struct AppTile: View {
                     .font(.system(size: 12.5, weight: .medium))
                     .foregroundStyle(.white)
                     .padding(.horizontal, 10).padding(.vertical, 4)
-                    .glassEffect(.regular.tint(.black.opacity(0.35)), in: .capsule)
+                    .background(Frosted(cornerRadius: 12))
                     .fixedSize()
                     .offset(y: -36)
                     .transition(.opacity.combined(with: .offset(y: 4)))
@@ -189,7 +204,7 @@ private struct AppTile: View {
             }
         }
         .contentShape(Rectangle())
-        .onHover { h in withAnimation(.easeOut(duration: 0.14)) { hover = h } }
+        .onHover { h in withAnimation(.easeOut(duration: 0.14)) { mouseOver = h } }
         .onTapGesture(perform: open)
         .contextMenu {
             // SwiftUI can't host an NSMenu directly; mirror its items.
@@ -204,4 +219,38 @@ private struct AppTile: View {
             }
         }
     }
+}
+
+/// Dark frosted blur of whatever is behind the window, like the reference Dock. Liquid Glass
+/// (`glassEffect`) fades to half opacity while it re-morphs during a width change, so it isn't used here.
+struct Frosted: NSViewRepresentable {
+    var cornerRadius: CGFloat
+    var material: NSVisualEffectView.Material = Frosted.dockMaterial
+    var alpha: CGFloat = 1
+
+    static var dockMaterial: NSVisualEffectView.Material = .menu
+
+    func makeNSView(context: Context) -> NSVisualEffectView {
+        let v = NSVisualEffectView()
+        v.appearance = NSAppearance(named: .darkAqua)
+        v.alphaValue = alpha
+        v.material = material
+        v.blendingMode = .behindWindow
+        v.state = .active
+        v.wantsLayer = true
+        v.layer?.cornerRadius = cornerRadius
+        v.layer?.cornerCurve = .continuous
+        v.layer?.masksToBounds = true
+        return v
+    }
+
+    func updateNSView(_ v: NSVisualEffectView, context: Context) {
+        v.layer?.cornerRadius = cornerRadius
+    }
+}
+
+extension AnyTransition {
+    /// Gone in 50ms regardless of the surrounding animation. `.identity` would keep a removed view
+    /// fully visible until the whole switch animation finishes.
+    static var quickExit: AnyTransition { .opacity.animation(.easeOut(duration: 0.05)) }
 }

@@ -120,3 +120,19 @@ Tested by John in Dia, with one Dia window in Work and one in Personal. The swit
 **Bug fixed: clicking a running app that has no windows.** Clicking Mimestream in the Work Dock (Mimestream running, no windows) sent ⌘N, which in Mimestream and Messages creates a new draft instead of showing the main window. Now an app that's running with no windows gets the same reopen event the native Dock sends (`NSWorkspace.openApplication`). ⌘N is used only for multi-window apps (browsers, editors, terminals, Finder) that have windows in other contexts. Verified: Mimestream from the Work Dock showed its Inbox window in Work, focused. The window had an old id (411348), so Mimestream had kept it ordered out, and it was adopted into Work.
 
 **Also fixed:** right-click > New Window Here focused an existing window when there was one; it now always opens a new window. `contextdock://new-window/<bundle id>` does the same.
+
+## 2026-10-27: Design pass against the reference video
+
+**Method.**
+- `ContextDock --gallery` opens a review window: every context selected, a forced hover on a context button and on an app (`forcedHover` environment value), and a live Dock that switches every 1.6s. It has no engine, panel or menu bar item.
+- Captures were the gallery window only (`screencapture -l`) or a region inside it, recorded with `screencapture -V` and cut into 30fps frames for timing.
+- Colours were sampled from the video frames.
+
+**Changes.**
+- **Pill:** flat colour with no gradient or glow, like the video. Work uses the video's Building blue **#3277BB**, Personal its Writing amber **#CF8812**, and Agents a violet toned to match, **#7B5CC4**. The defaults changed, and so did the three `color` values in John's config.json (nothing else in it).
+- **Bar:** Liquid Glass (`glassEffect`) faded the whole bar to about half opacity while it re-morphed during a width change. Replaced with `NSVisualEffectView` (behind-window blur, dark appearance, `.menu` material). In a swatch test over the gallery gradient, `.menu` darkened the background about 27% and kept its hue. The video's bar darkens its wallpaper about 25% and stays warm. `hudWindow` barely darkened, and `headerView`/`sidebar` went grey.
+  - The gallery's own Dock rows can't show bar colour, because the blur samples what's behind the *window*, not the gradient inside it. Only the live Dock, a separate window over the desktop, shows it.
+- **Switch animation:** it took 0.47s against the video's ~0.3s, now 0.30–0.33s. Old icons and the old label leave in 50ms (`quickExit`); `.identity` had kept them fully visible until the animation ended, so they overlapped the new pill and hung past the shrinking bar. The new pill arrives solid and slides, with no orange/purple cross-fade. Its label fades in after 110ms, once the pill is wide enough. The icon cascade uses an 18ms stagger and a 0.2s spring.
+- **Hover:** works on the live, non-activating Dock panel (checked by moving the pointer onto it). A context button brightens; an app icon lifts 2pt, scales 1.08 and shows its name in a frosted capsule. The video shows no hover states, so these follow the native Dock.
+
+**Left as is:** layout, spacing and the icon-to-control size ratios already matched the video within a few points.

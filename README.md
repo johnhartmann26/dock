@@ -43,6 +43,10 @@ On first launch, approve **ContextDock** in System Settings > Privacy & Security
 
 **Automation:** `open -g contextdock://switch/work`, `contextdock://move-front/personal`, `contextdock://open/<bundle id>`, `contextdock://new-window/<bundle id>`, `contextdock://recover`, `contextdock://dump` (writes `debug.json` next to the state).
 
+## Design review
+
+`build/ContextDock.app/Contents/MacOS/ContextDock --gallery` opens a window with every Dock state, forced hover states and a Dock that switches every 1.6s. It doesn't touch your windows.
+
 ## What happens if it dies
 
 Window assignments and each parked window's exact frame are written to `~/Library/Application Support/ContextDock/state.json` on every change.
