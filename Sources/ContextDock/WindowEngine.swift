@@ -424,16 +424,32 @@ final class WindowEngine {
         for w in windows.values {
             guard let frame = w.parkedFrame else { continue }
             parked += 1
-            let corner = parkCorner(for: frame)
-            if let now = AX.frame(w.element)?.origin, abs(now.x - corner.x) > 2 || abs(now.y - corner.y) > 2 {
+            if !isTucked(w.element, parkedFrom: frame) {
                 moved += 1
-                AX.setPosition(w.element, corner)
+                AX.setPosition(w.element, parkCorner(for: frame))
             }
         }
         applyVisibility()
         note("\(why): \(parked) parked, \(moved) re-pinned")
         persist()
         changed()
+    }
+
+    /// Out of view: pushed off the right edge. macOS clamps the vertical position (it keeps the title
+    /// bar's height on screen), so only x tells whether a parked window is still hidden.
+    private func isTucked(_ el: AXUIElement, parkedFrom frame: CGRect) -> Bool {
+        guard let now = AX.frame(el)?.origin else { return true }
+        return now.x >= parkCorner(for: frame).x - 2
+    }
+
+    /// An app moved one of its parked windows back on screen (Safari does when a video leaves or
+    /// enters fullscreen, because macOS pulls a window on screen when it's brought forward). Put it
+    /// straight back, so it shows for a frame or two instead of until the next pass.
+    private func windowMoved(_ el: AXUIElement) {
+        guard let id = AX.windowID(el), let w = windows[id], let frame = w.parkedFrame,
+              !seenFullScreen.contains(id), !isTucked(el, parkedFrom: frame) else { return }
+        AX.setPosition(el, parkCorner(for: frame))
+        note("re-tucked \(w.bundleID) \(id): the app moved it back on screen")
     }
 
     // MARK: - Discovery
@@ -670,6 +686,7 @@ final class WindowEngine {
         guard let observer = observers[pid] else { return }
         let refcon = Unmanaged.passUnretained(self).toOpaque()
         AXObserverAddNotification(observer, el, kAXUIElementDestroyedNotification as CFString, refcon)
+        AXObserverAddNotification(observer, el, kAXMovedNotification as CFString, refcon)
         if Self.browsers.contains(bundleID) {
             AXObserverAddNotification(observer, el, kAXTitleChangedNotification as CFString, refcon)
         }
@@ -685,6 +702,8 @@ final class WindowEngine {
             prune(pid)
         case kAXTitleChangedNotification:
             titleChanged(element, pid: pid)
+        case kAXMovedNotification:
+            windowMoved(element)
         default:
             // Decide a moment later, once any Space change behind this focus change has been announced.
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
