@@ -197,8 +197,11 @@ final class WindowEngine {
             focus(preferred)
             return
         }
+        // Fullscreen windows are skipped: focusing one jumps to its Space instead of showing this
+        // context's desktop. They stay a swipe or ⌘-Tab away.
         let candidates = windows.values
             .filter { $0.context == current && !isShared($0.bundleID) && !AX.isMinimized($0.element) }
+            .filter { !AX.isFullScreen($0.element) }
             .sorted { $0.lastFocus > $1.lastFocus }
         if let top = candidates.first {
             focus(top.id)
