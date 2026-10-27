@@ -30,6 +30,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var swipeUsed = false
     private let threeFinger = ThreeFingerSwipe()
     private var lastStep: (reason: String, at: Date)?
+    private lazy var wipe: Wipe = {
+        let w = Wipe()
+        w.log = { [weak self] in self?.engine.note($0) }
+        return w
+    }()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         noNap = ProcessInfo.processInfo.beginActivity(options: [.userInitiatedAllowingIdleSystemSleep, .latencyCritical],
@@ -37,7 +42,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let config = DockConfig.load()
         engine = WindowEngine(config: config)
         state = DockState(config: config, current: engine.current)
-        state.onSelect = { [weak self] id in self?.engine.switchTo(id) }
+        state.onSelect = { [weak self] id in self?.userSwitch(to: id, reason: "dock") }
         state.onOpenApp = { [weak self] id in self?.engine.openApp(id) }
         state.onMenuForApp = { [weak self] id in self?.windowMenu(for: id) }
         engine.onChange = { [weak self] in self?.syncUI() }
@@ -77,7 +82,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         for ctx in engine.config.contexts {
             guard let code = HotKeys.keyCode(for: ctx.key) else { continue }
             let id = ctx.id
-            hotKeys.register(code, modifiers: [.control, .option]) { [weak self] in self?.engine.switchTo(id, reason: "hotkey") }
+            hotKeys.register(code, modifiers: [.control, .option]) { [weak self] in self?.userSwitch(to: id, reason: "hotkey") }
             hotKeys.register(code, modifiers: [.control, .option, .shift]) { [weak self] in self?.engine.moveFocusedWindow(to: id) }
         }
     }
@@ -108,7 +113,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let ids = engine.config.contexts.map(\.id)
         guard let i = ids.firstIndex(of: engine.current) else { return }
         let next = fingers < 0 ? i + 1 : i - 1
-        if ids.indices.contains(next) { engine.switchTo(ids[next], reason: reason) }
+        if ids.indices.contains(next) { userSwitch(to: ids[next], reason: reason) }
+    }
+
+    /// A switch you asked for (Dock, hotkey, swipe, menu) plays the frosted wipe; switches an app
+    /// triggers (focus-follow, links, home windows) stay instant so their window isn't held up.
+    private func userSwitch(to id: String, reason: String) {
+        let ids = engine.config.contexts.map(\.id)
+        guard id != engine.current, let from = ids.firstIndex(of: engine.current), let to = ids.firstIndex(of: id),
+              let ctx = engine.config.contexts.first(where: { $0.id == id }) else {
+            engine.switchTo(id, reason: reason)
+            return
+        }
+        guard engine.config.switchAnimation ?? true, !wipe.running else {
+            engine.switchTo(id, reason: reason)
+            return
+        }
+        wipe.run(direction: to > from ? 1 : -1, tint: NSColor(ctx.tint), below: panel) { [weak self] in
+            self?.engine.switchTo(id, reason: reason)
+        }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -122,6 +145,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let arg = url.pathComponents.dropFirst().first ?? ""
             switch url.host {
             case "switch": engine.switchTo(arg, reason: "url")
+            case "switch-animated": userSwitch(to: arg, reason: "url")
             case "move-front": engine.moveFocusedWindow(to: arg)
             case "move":   // contextdock://move/<window id>/<context>
                 let parts = url.pathComponents.dropFirst()
@@ -225,7 +249,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return menu
     }
 
-    @objc private func switchFromMenu(_ sender: NSMenuItem) { engine.switchTo(sender.representedObject as! String, reason: "menu") }
+    @objc private func switchFromMenu(_ sender: NSMenuItem) { userSwitch(to: sender.representedObject as! String, reason: "menu") }
     @objc private func moveFromMenu(_ sender: NSMenuItem) { engine.moveFocusedWindow(to: sender.representedObject as! String) }
     @objc private func focusWindow(_ sender: NSMenuItem) { engine.focus(sender.representedObject as! CGWindowID) }
     @objc private func openApp(_ sender: NSMenuItem) { engine.newWindowHere(sender.representedObject as! String) }

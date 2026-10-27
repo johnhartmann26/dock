@@ -272,3 +272,18 @@ John confirmed that dragging or maximizing a window now keeps it out from behind
 - **Touch states, verified on John's trackpad:** the first three-finger frame logged states `4,1,4`, so 4 = touching and 1 = just landing. That's the 0-based numbering (3 making, 4 touching, 5 breaking), and the accepted range 3...5 is right.
 
 John: a dozen three-finger swipes, every one switched.
+
+## 2026-10-27: Frosted wipe between contexts
+
+**John asked for a short animation between contexts and picked the frosted wipe** over a real slide or a crossfade, both of which would need Screen Recording permission to snapshot the screen. Animating the real windows isn't practical through AX.
+
+**How it works (`Wipe.swift`):**
+- A borderless window one level below the Dock carries a behind-window blur (`.fullScreenUI`, dark), a 22% tint of the destination context's colour, and a 140pt soft-edge gradient mask.
+- It sweeps in from the side you're switching toward (fingers left / next context → right to left) over about 130ms, easing in.
+- The windows swap while it fully covers the screen (about 80–100ms of AX moves, hidden).
+- It continues off the other side over about 170ms, easing out.
+- AppKit animates window frames over `animationResizeTime`, not the context's duration (the first reveal measured 77ms), so `WipeWindow` returns the intended duration.
+
+**When it plays:** for switches you make (Dock click, hotkey, Dock swipe, three-finger swipe, menu). Focus-follow, links, home windows and `contextdock://switch` stay instant; `contextdock://switch-animated/<id>` plays it. A switch requested mid-wipe goes through instantly. With Reduce Motion on, it fades in place. `"switchAnimation": false` in config.json turns it off.
+
+**Measured:** covered at 120–131ms, swap 76–103ms, reveal 102–176ms. The look hasn't been recorded, because frames would show John's windows; John judges it on screen.
