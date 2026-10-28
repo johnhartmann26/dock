@@ -112,10 +112,13 @@ private struct SwipeTracker {
     var abandoned = false
     /// The most fingers seen moving in this touch, for the log when nothing fired.
     var mostMoving = 0
+    /// When the last swipe fired. Fingers lifting unevenly can look like a second swipe right
+    /// after the first; real back-to-back swipes are 0.45s or more apart.
+    var firedAt: Double = 0
 
     enum Outcome { case swipe(Int), missed(String) }
 
-    mutating func update(_ touches: [Touch]) -> Outcome? {
+    mutating func update(_ touches: [Touch], at time: Double) -> Outcome? {
         let ids = Set(touches.map(\.id))
         landed = landed.filter { ids.contains($0.key) }
         for t in touches where landed[t.id] == nil { landed[t.id] = (t.x, t.y) }
@@ -155,6 +158,8 @@ private struct SwipeTracker {
         // Three sideways together, and nothing else moving with them.
         guard stirring == 3, left == 3 || right == 3 else { return nil }
         fired = true
+        guard time - firedAt > 0.3 else { return .missed("second swipe within 0.3s of the last, treated as the same one") }
+        firedAt = time
         return .swipe(left == 3 ? -1 : 1)
     }
 }
@@ -165,7 +170,7 @@ private nonisolated(unsafe) var loggedStates = false
 /// MultitouchSupport's per-frame callback. Each finger record is 96 bytes: identifier at offset 16,
 /// touch state at 20, and the
 /// normalized position (two Floats, 0...1, origin bottom-left) at 32.
-private let contactCallback: @convention(c) (Int32, UnsafeMutableRawPointer?, Int32, Double, Int32) -> Int32 = { _, data, count, _, _ in
+private let contactCallback: @convention(c) (Int32, UnsafeMutableRawPointer?, Int32, Double, Int32) -> Int32 = { _, data, count, timestamp, _ in
     var touches: [Touch] = []
     var states: [Int32] = []
     if let data {
@@ -186,7 +191,7 @@ private let contactCallback: @convention(c) (Int32, UnsafeMutableRawPointer?, In
         let seen = states.map(String.init).joined(separator: ",")
         DispatchQueue.main.async { MainActor.assumeIsolated { ThreeFingerSwipe.shared?.log("three-finger swipe: first touch states \(seen)") } }
     }
-    switch tracker.update(touches) {
+    switch tracker.update(touches, at: timestamp) {
     case .swipe(let dir)?:
         DispatchQueue.main.async { MainActor.assumeIsolated { ThreeFingerSwipe.shared?.fire(dir) } }
     case .missed(let why)?:
