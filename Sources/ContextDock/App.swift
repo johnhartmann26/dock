@@ -169,6 +169,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         // A switch during a slide (a quick double swipe) carries the slide on to the new context.
         heading = id
+        watchMainThread(label: "\(engine.current) -> \(id)")
         // When a browser has to change profile, the switch takes about half a second longer; a
         // slower slide fills that time instead of stopping on a still picture while it finishes.
         let slow = changesProfile(from: engine.current, to: id) ? 0.6 : nil
@@ -177,6 +178,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self.heading = nil
             self.engine.switchTo(id, reason: reason)
         }
+    }
+
+    /// For the log: where the main thread stalled during a switch (the Dock animates on it, so a
+    /// stall shows as the Dock stuttering).
+    private func watchMainThread(label: String) {
+        let start = Date()
+        var last = start
+        var stalls: [String] = []
+        let timer = Timer(timeInterval: 0.005, repeats: true) { t in
+            let now = Date()
+            let gap = now.timeIntervalSince(last)
+            if gap > 0.03 { stalls.append("\(Int(gap * 1000))ms at \(Int(last.timeIntervalSince(start) * 1000))") }
+            last = now
+            if now.timeIntervalSince(start) > 1.2 {
+                t.invalidate()
+                MainActor.assumeIsolated {
+                    self.engine.note("main thread \(label): " + (stalls.isEmpty ? "no stalls" : "stalled " + stalls.joined(separator: ", ")))
+                }
+            }
+        }
+        RunLoop.main.add(timer, forMode: .common)
     }
 
     /// Whether a running browser shows a different profile in `to` than in `from`.

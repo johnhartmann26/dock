@@ -106,7 +106,7 @@ struct DockView: View {
         .padding(.leading, 9)
         .padding(.trailing, 10)
         .padding(.vertical, DockMetrics.padV)
-        .background(Frosted(cornerRadius: DockMetrics.corner))
+        .background(DockGlass(cornerRadius: DockMetrics.corner))
         .overlay(
             RoundedRectangle(cornerRadius: DockMetrics.corner, style: .continuous)
                 .strokeBorder(.primary.opacity(0.10), lineWidth: 0.5)
@@ -219,6 +219,27 @@ private struct AppTile: View {
     }
 }
 
+/// The Dock's background: Liquid Glass like the macOS 26 Dock, so what's behind shows through.
+/// AppKit's glass view just resizes when the Dock's width changes (SwiftUI's `glassEffect` fades
+/// out while it re-morphs). Frosted blur before macOS 26.
+struct DockGlass: NSViewRepresentable {
+    var cornerRadius: CGFloat
+
+    func makeNSView(context: Context) -> NSView {
+        if #available(macOS 26.0, *) {
+            let g = NSGlassEffectView()
+            g.cornerRadius = cornerRadius
+            g.style = .regular
+            return g
+        }
+        return Frosted.make(cornerRadius: cornerRadius, material: Frosted.dockMaterial, alpha: 1)
+    }
+
+    func updateNSView(_ v: NSView, context: Context) {
+        if #available(macOS 26.0, *), let g = v as? NSGlassEffectView { g.cornerRadius = cornerRadius }
+    }
+}
+
 /// Frosted blur of whatever is behind the window, light or dark with the system like the macOS Dock. Liquid Glass
 /// (`glassEffect`) fades to half opacity while it re-morphs during a width change, so it isn't used here.
 struct Frosted: NSViewRepresentable {
@@ -229,6 +250,10 @@ struct Frosted: NSViewRepresentable {
     static var dockMaterial: NSVisualEffectView.Material = .menu
 
     func makeNSView(context: Context) -> NSVisualEffectView {
+        Self.make(cornerRadius: cornerRadius, material: material, alpha: alpha)
+    }
+
+    static func make(cornerRadius: CGFloat, material: NSVisualEffectView.Material, alpha: CGFloat) -> NSVisualEffectView {
         let v = NSVisualEffectView()
         v.alphaValue = alpha
         v.material = material

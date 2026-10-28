@@ -165,6 +165,8 @@ final class WindowEngine {
 
     /// The last 60 switches, swipes, slides (and wake/display passes) and why, for `contextdock://dump`.
     private var recentSwitches: [String] = []
+    /// Accessibility calls that only change things (focus, raise) run here, in order, off the main thread.
+    private let axQueue = DispatchQueue(label: "ContextDock.ax", qos: .userInteractive)
 
     func note(_ event: String) {
         recentSwitches.append("\(Date().formatted(.iso8601.time(includingFractionalSeconds: true))) \(event)")
@@ -289,11 +291,15 @@ final class WindowEngine {
     func focus(_ id: CGWindowID) {
         guard var w = windows[id] else { return }
         if AX.isMinimized(w.element) { AX.set(w.element, kAXMinimizedAttribute, kCFBooleanFalse) }
-        AX.raise(w.element)
-        // NSRunningApplication.activate is only a request on macOS 14+ and is often refused for a
-        // background app; setting AXFrontmost on the app does it.
-        AX.set(AX.app(w.pid), kAXFrontmostAttribute, kCFBooleanTrue)
-        NSRunningApplication(processIdentifier: w.pid)?.activate()
+        // On a background queue: each call waits for the app to answer, and the Dock animates on the
+        // main thread. NSRunningApplication.activate is only a request on macOS 14+ and is often
+        // refused for a background app; setting AXFrontmost on the app does it.
+        let element = w.element, pid = w.pid
+        axQueue.async {
+            AX.raise(element)
+            AX.set(AX.app(pid), kAXFrontmostAttribute, kCFBooleanTrue)
+            NSRunningApplication(processIdentifier: pid)?.activate()
+        }
         w.lastFocus = Date()
         windows[id] = w
     }
@@ -741,6 +747,10 @@ final class WindowEngine {
     /// ⌘-Tab, ⌘-`, a link landing in a browser window, a notification click: if the window that
     /// comes forward lives in another context, go to that context.
     private func focusChanged(pid: pid_t) {
+        // Right after a switch the focus changes are our own (or Dia's profile switch). Skip them
+        // before asking the app anything: an app that's busy redrawing answers slowly, and that
+        // wait would freeze the Dock's animation.
+        guard Date() >= ignoreFocusUntil else { return }
         guard pid != getpid(), let app = NSRunningApplication(processIdentifier: pid), manages(app),
               let el = AX.focusedWindow(of: AX.app(pid)), let id = AX.windowID(el) else { return }
         if windows[id] == nil, !adopt(el, pid: pid) { return }
@@ -803,8 +813,20 @@ final class WindowEngine {
     private func appActivated(_ app: NSRunningApplication) {
         let pid = app.processIdentifier
         let activatedAt = Date()
-        // Windows on a Space we couldn't see at launch show up once their app comes forward.
-        if manages(app) { scan(app) }
+        // Windows on a Space we couldn't see at launch show up once their app comes forward. Right
+        // after a switch the activations are ours, so look a moment later: the app may still be busy
+        // (Dia switching profile) and waiting for it would freeze the Dock's animation.
+        if manages(app) {
+            let wait = ignoreFocusUntil.timeIntervalSince(activatedAt)
+            if wait > 0 {
+                DispatchQueue.main.asyncAfter(deadline: .now() + wait + 0.1) { [weak self] in
+                    guard let self, !app.isTerminated else { return }
+                    self.scan(app)
+                }
+            } else {
+                scan(app)
+            }
+        }
         guard let bundleID = app.bundleIdentifier, Self.browsers.contains(bundleID) else {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
                 guard let self, (self.lastAdoptAt[pid] ?? .distantPast) < activatedAt else { return }
@@ -823,6 +845,10 @@ final class WindowEngine {
     }
 
     private func titleChanged(_ el: AXUIElement, pid: pid_t) {
+        // A shared app's windows are everywhere, so a link landing in one never switches. Skip it
+        // before asking the app anything: Dia retitles its windows while switching profile and
+        // answers slowly then.
+        if let bundleID = NSRunningApplication(processIdentifier: pid)?.bundleIdentifier, isShared(bundleID) { return }
         guard let id = AX.windowID(el), let w = windows[id] else { return }
         let title = Self.normalized(AX.title(el))
         let before = titles[id]

@@ -362,3 +362,11 @@ Follow-up: Dia also plays its own profile animation inside its window for a mome
 - **An app in only one context's Dock lives there.** Its new windows open in that context (and take you there), like a `homes` entry. Found a Messages window living in Agents with Messages only in the Personal Dock. A Dock click still opens a window where you are.
 - **Windows whose accessibility handle goes stale are picked up again.** Granola's Work window was showing in Personal: Granola had given it a new AX handle and the old one stopped answering, so it couldn't be parked. Before parking or restoring, a window that doesn't answer is looked up again by its window id.
 - **The Dock follows light and dark mode** like the macOS Dock (it was forced dark). Text, dots and dividers use the system's primary color; the selected context's pill keeps its color with a white symbol. Shadow a little lighter (0.2).
+
+## The Dock stuttered on Personal ↔ Work
+
+The Dock animates on the main thread, and during a profile switch the main thread was waiting on Dia (busy redrawing) for 100-200ms: reading the title of a Dia window Dia had just retitled, rescanning each app as it came forward, and the focus calls. Measured with a main-thread stall log per switch (`main thread a -> b: stalled …` in the dump), and `sample`. Now title changes of shared apps (Dia) are skipped before asking the app anything (a link landing in a shared app never switches anyway), focus changes during a switch are skipped before any AX read, the rescan on activation waits until the switch is over, and focus/raise run on a background queue. The ~100ms freeze at ~200ms is gone; what's left is ~60ms when the windows move, before the Dock's animation starts.
+
+## The Dock is Liquid Glass
+
+On macOS 26 the Dock's background is AppKit's `NSGlassEffectView` (regular style), like the system Dock, so what's behind shows through. AppKit's glass just resizes when the Dock's width changes, unlike SwiftUI's `glassEffect`, which fades out while it re-morphs. Frosted blur on older macOS. A single-window screenshot shows it black because it has nothing behind it to sample.
