@@ -370,3 +370,5 @@ The Dock animates on the main thread, and during a profile switch the main threa
 ## The Dock is Liquid Glass
 
 On macOS 26 the Dock's background is AppKit's `NSGlassEffectView` (regular style), like the system Dock, so what's behind shows through. AppKit's glass just resizes when the Dock's width changes, unlike SwiftUI's `glassEffect`, which fades out while it re-morphs. Frosted blur on older macOS. A single-window screenshot shows it black because it has nothing behind it to sample.
+
+Follow-up: in light mode the plain glass looked dark over anything but a white page. It now gets a 60% white tint in light mode (`DockGlassView.lightTint`), re-applied when the appearance changes; dark mode stays plain glass, which John said looks good.
