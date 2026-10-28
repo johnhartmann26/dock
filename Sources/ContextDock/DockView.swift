@@ -241,12 +241,13 @@ struct DockGlass: NSViewRepresentable {
     }
 }
 
-/// Plain glass picks up the colors behind it, so in light mode it looked dark over anything but a
-/// white page. In light mode it gets a white tint so it reads as light frosted glass, like the
-/// light macOS Dock; dark mode is left as plain glass.
+/// Plain glass picks up the colors behind it: in light mode it looked dark over anything but a
+/// white page, and in dark mode light over anything but a dark one. So it's tinted toward the
+/// mode: white in light mode, black in dark mode, like the macOS Dock.
 @available(macOS 26.0, *)
 final class DockGlassView: NSGlassEffectView {
     static let lightTint = NSColor.white.withAlphaComponent(0.6)
+    static let darkTint = NSColor.black.withAlphaComponent(0.45)
 
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
@@ -255,7 +256,7 @@ final class DockGlassView: NSGlassEffectView {
 
     func applyTint() {
         let dark = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-        tintColor = dark ? nil : Self.lightTint
+        tintColor = dark ? Self.darkTint : Self.lightTint
     }
 }
 
