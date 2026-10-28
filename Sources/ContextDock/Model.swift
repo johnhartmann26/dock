@@ -33,16 +33,16 @@ struct DockConfig: Codable {
                                "com.apple.Notes", "com.hnc.Discord"],
                         key: "1"),
             DockContext(id: "work", name: "Work", symbol: "briefcase.fill", color: "#3277BB",
-                        apps: ["company.thebrowser.dia", "com.google.Chrome", "com.mimestream.Mimestream", "com.tinyspeck.slackmacgap",
+                        apps: ["company.thebrowser.dia", "com.mimestream.Mimestream", "com.tinyspeck.slackmacgap",
                                "com.granola.app", "com.flexibits.fantastical2.mac"],
                         key: "2"),
             DockContext(id: "agents", name: "Agents", symbol: "robot", color: "#7B5CC4",
-                        apps: ["company.thebrowser.dia", "dev.serafim.fast", "com.anthropic.claudefordesktop", "com.openai.codex",
+                        apps: ["company.thebrowser.dia", "com.anthropic.claudefordesktop", "com.openai.codex",
                                "com.microsoft.VSCode", "com.apple.Terminal"],
                         key: "3"),
         ],
         shared: ["com.apple.Music", "com.1password.1password", "com.apple.finder", "company.thebrowser.dia"],
-        homes: ["com.google.Chrome": "work", "dev.serafim.fast": "agents"],
+        homes: [:],
         profiles: ["company.thebrowser.dia": ["personal": "Solo", "work": "Work", "agents": "Work"]]
     )
 
