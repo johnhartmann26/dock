@@ -6,11 +6,14 @@ import AppKit
 ///
 /// Uses the browser's AppleScript `focus` command, so macOS asks once for permission to control it.
 /// It runs off the main thread (about 0.1s), and only when the browser is already running, so a
-/// switch never launches it. Dia's `focus` also brings Dia to the front, so whatever app was in
-/// front before goes back to the front afterwards.
+/// switch never launches it. Dia's `focus` also brings Dia to the front, so if it took the front,
+/// `onStoleFocus` lets the engine focus the context's own window again (not the app that was in
+/// front before: right after a switch that's still the old context's app, and following it would
+/// switch you back).
 @MainActor
 final class BrowserProfiles {
     var log: (String) -> Void = { _ in }
+    var onStoleFocus: () -> Void = {}
     private let queue = DispatchQueue(label: "ContextDock.profiles")
 
     func apply(_ profiles: [String: [String: String]]?, context: String) {
@@ -50,9 +53,8 @@ final class BrowserProfiles {
                 DispatchQueue.main.async {
                     MainActor.assumeIsolated {
                         let now = NSWorkspace.shared.frontmostApplication
-                        if let front, front.bundleIdentifier != bundleID, now?.bundleIdentifier == bundleID, !front.isTerminated {
-                            // NSRunningApplication.activate is only a request on macOS 14+; AX is reliable.
-                            AX.set(AX.app(front.processIdentifier), kAXFrontmostAttribute, kCFBooleanTrue)
+                        if front?.bundleIdentifier != bundleID, now?.bundleIdentifier == bundleID {
+                            self?.onStoleFocus()
                         }
                         self?.log(message.map { "profile: \(profile) in \(bundleID) failed: \($0)" }
                                   ?? "profile: \(profile) in \(bundleID), \(ms)ms")

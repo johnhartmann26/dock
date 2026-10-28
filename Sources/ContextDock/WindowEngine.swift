@@ -258,6 +258,13 @@ final class WindowEngine {
         }
     }
 
+    /// Focus this context's own top window again, after something else (a browser's profile
+    /// switch) grabbed the front. Focus changes in the next moment don't count as you moving.
+    func refocus() {
+        ignoreFocusUntil = Date().addingTimeInterval(0.45)
+        focusCurrent(preferring: nil)
+    }
+
     private func focusCurrent(preferring preferred: CGWindowID?) {
         if let preferred, windows[preferred] != nil {
             focus(preferred)
@@ -283,6 +290,9 @@ final class WindowEngine {
         guard var w = windows[id] else { return }
         if AX.isMinimized(w.element) { AX.set(w.element, kAXMinimizedAttribute, kCFBooleanFalse) }
         AX.raise(w.element)
+        // NSRunningApplication.activate is only a request on macOS 14+ and is often refused for a
+        // background app; setting AXFrontmost on the app does it.
+        AX.set(AX.app(w.pid), kAXFrontmostAttribute, kCFBooleanTrue)
         NSRunningApplication(processIdentifier: w.pid)?.activate()
         w.lastFocus = Date()
         windows[id] = w

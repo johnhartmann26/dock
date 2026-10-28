@@ -86,6 +86,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         engine.start()
         threeFinger.log = { [weak self] in self?.engine.note($0) }
         profiles.log = { [weak self] in self?.engine.note($0) }
+        profiles.onStoleFocus = { [weak self] in self?.engine.refocus() }
         if profilesShown != engine.current {
             profilesShown = engine.current
             profiles.apply(engine.config.profiles, context: engine.current)
