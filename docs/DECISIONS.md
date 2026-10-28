@@ -316,3 +316,5 @@ John confirmed the 0.15s slide feels right.
 - **Missed swipes, cause 1:** after a three-finger swipe fired, the tracker reset only when every finger was off the pad, so a finger left resting made the next swipe do nothing. Now it starts over once fewer than three fingers remain.
 - **Missed swipes, cause 2:** a swipe during a slide counted from the context you were leaving if the windows hadn't moved yet, so it repeated the first step. Steps now count from where a slide is heading, and a later swipe wins over the slide's own switch.
 - Every swipe that doesn't switch is now logged with why (at the end, same gesture as a Dock swipe, macOS still owns three-finger swipes), and the log keeps 60 lines instead of 20.
+
+John confirmed: swiping feels fast and every swipe switched.
