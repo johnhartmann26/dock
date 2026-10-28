@@ -9,17 +9,22 @@ import AppKit
 /// switch never launches it. Dia's `focus` also brings Dia to the front, so if it took the front,
 /// `onStoleFocus` lets the engine focus the context's own window again (not the app that was in
 /// front before: right after a switch that's still the old context's app, and following it would
-/// switch you back).
+/// switch you back). `done` runs once every browser has switched and the focus is put back, so the
+/// slide can keep covering the screen until then.
 @MainActor
 final class BrowserProfiles {
     var log: (String) -> Void = { _ in }
     var onStoleFocus: () -> Void = {}
     private let queue = DispatchQueue(label: "ContextDock.profiles")
 
-    func apply(_ profiles: [String: [String: String]]?, context: String) {
-        for (bundleID, byContext) in profiles ?? [:] {
-            guard let profile = byContext[context],
-                  !NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).isEmpty else { continue }
+    func apply(_ profiles: [String: [String: String]]?, context: String, done: @escaping () -> Void = {}) {
+        let browsers = (profiles ?? [:]).compactMap { bundleID, byContext in
+            byContext[context].map { (bundleID, $0) }
+        }.filter { !NSRunningApplication.runningApplications(withBundleIdentifier: $0.0).isEmpty }
+        guard !browsers.isEmpty else { done(); return }
+        var left = browsers.count
+        let finished = { left -= 1; if left == 0 { done() } }
+        for (bundleID, profile) in browsers {
             let name = profile.replacingOccurrences(of: "\"", with: "\\\"")
             let source = """
             tell application id "\(bundleID)"
@@ -41,6 +46,7 @@ final class BrowserProfiles {
                     DispatchQueue.main.async {
                         MainActor.assumeIsolated {
                             self?.log("profile: no permission to control \(bundleID) (\(status)); allow ContextDock in System Settings > Privacy & Security > Automation")
+                            finished()
                         }
                     }
                     return
@@ -58,6 +64,7 @@ final class BrowserProfiles {
                         }
                         self?.log(message.map { "profile: \(profile) in \(bundleID) failed: \($0)" }
                                   ?? "profile: \(profile) in \(bundleID), \(ms)ms")
+                        finished()
                     }
                 }
             }

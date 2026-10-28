@@ -223,7 +223,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func syncUI() {
         if profilesShown != engine.current {
             profilesShown = engine.current
-            profiles.apply(engine.config.profiles, context: engine.current)
+            // During a slide, the overlay covers the browser coming to the front to switch profile.
+            profiles.apply(engine.config.profiles, context: engine.current, done: slide.hold())
         }
         state.show(engine.current)
         let ctx = engine.current

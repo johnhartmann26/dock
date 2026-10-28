@@ -27,6 +27,35 @@ final class Slide {
     /// start straight away instead of waiting for the windows to move and a second snapshot.
     private var pictures: [String: CGImage] = [:]
 
+    /// Work started by the switch that changes what's on screen after the windows move (a browser
+    /// switching profile brings itself to the front, redraws, then the context's window is put back).
+    /// The overlay stays up until it's done, at most `holdLimit`, so you don't see it happen.
+    private var holds = 0
+    private var slideNumber = 0
+    private let holdLimit: TimeInterval = 0.7
+
+    /// Keep the overlay up until the returned closure is called. Does nothing when no slide is playing.
+    func hold() -> () -> Void {
+        guard running else { return {} }
+        holds += 1
+        let number = slideNumber
+        var released = false
+        return { [weak self] in
+            guard !released, let self, self.slideNumber == number else { return }
+            released = true
+            self.holds -= 1
+        }
+    }
+
+    private func waitForHolds() async -> Bool {
+        guard holds > 0 else { return false }
+        let limit = Date().addingTimeInterval(holdLimit)
+        while holds > 0, Date() < limit { try? await Task.sleep(for: .milliseconds(10)) }
+        // Give the app a moment to draw what it just switched to.
+        try? await Task.sleep(for: .milliseconds(40))
+        return true
+    }
+
     /// direction: +1 when moving to the context on the right (content moves left), -1 back.
     func run(direction: Int, from: String, to: String, below dock: NSWindow, swap: @escaping () -> Void) {
         guard !running else { swap(); return }
@@ -40,6 +69,8 @@ final class Slide {
             return
         }
         running = true
+        holds = 0
+        slideNumber += 1
         Task { @MainActor in
             let began = Date()
             guard let before = await capture(), let screen = dock.screen ?? NSScreen.main else {
@@ -78,6 +109,8 @@ final class Slide {
                 let moved = Date()
                 let left = duration - moved.timeIntervalSince(covered)
                 if left > 0 { try? await Task.sleep(for: .milliseconds(Int(left * 1000))) }
+                let held = Date()
+                let waited = await waitForHolds()
                 await NSAnimationContext.runAnimationGroup { ctx in
                     ctx.duration = 0.08
                     w.animator().alphaValue = 0
@@ -85,7 +118,7 @@ final class Slide {
                 w.orderOut(nil)
                 root.sublayers = nil
                 running = false
-                log("slide: from memory, to \(to), first snapshot \(ms(began, captured))ms, cover \(ms(captured, covered))ms, swap \(ms(covered, moved))ms (during the slide), total \(ms(began, Date()))ms")
+                log("slide: from memory, to \(to), first snapshot \(ms(began, captured))ms, cover \(ms(captured, covered))ms, swap \(ms(covered, moved))ms (during the slide)\(waited ? ", held \(ms(held, Date()))ms" : ""), total \(ms(began, Date()))ms")
                 return
             }
 
@@ -93,7 +126,7 @@ final class Slide {
             swap()
             let moved = Date()
             // Let apps finish redrawing after their windows moved before taking the "after" picture.
-            try? await Task.sleep(for: .milliseconds(25))
+            if await !waitForHolds() { try? await Task.sleep(for: .milliseconds(25)) }
             let after = await capture()
             if let after { pictures[to] = after }
             let swapped = Date()
