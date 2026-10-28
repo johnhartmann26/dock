@@ -6,7 +6,8 @@ import AppKit
 ///
 /// Uses the browser's AppleScript `focus` command, so macOS asks once for permission to control it.
 /// It runs off the main thread (about 0.1s), and only when the browser is already running, so a
-/// switch never launches it.
+/// switch never launches it. Dia's `focus` also brings Dia to the front, so whatever app was in
+/// front before goes back to the front afterwards.
 @MainActor
 final class BrowserProfiles {
     var log: (String) -> Void = { _ in }
@@ -24,6 +25,7 @@ final class BrowserProfiles {
                 end repeat
             end tell
             """
+            let front = NSWorkspace.shared.frontmostApplication
             queue.async { [weak self] in
                 // Ask for permission the proper way first: a script run without it just fails.
                 var target = AEAddressDesc()
@@ -47,6 +49,11 @@ final class BrowserProfiles {
                 let message = error?[NSAppleScript.errorMessage] as? String
                 DispatchQueue.main.async {
                     MainActor.assumeIsolated {
+                        let now = NSWorkspace.shared.frontmostApplication
+                        if let front, front.bundleIdentifier != bundleID, now?.bundleIdentifier == bundleID, !front.isTerminated {
+                            // NSRunningApplication.activate is only a request on macOS 14+; AX is reliable.
+                            AX.set(AX.app(front.processIdentifier), kAXFrontmostAttribute, kCFBooleanTrue)
+                        }
                         self?.log(message.map { "profile: \(profile) in \(bundleID) failed: \($0)" }
                                   ?? "profile: \(profile) in \(bundleID), \(ms)ms")
                     }

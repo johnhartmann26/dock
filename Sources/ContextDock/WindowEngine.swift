@@ -242,14 +242,19 @@ final class WindowEngine {
                   let id = w[kCGWindowNumber as String] as? CGWindowID, !known.contains(id) else { return nil }
             return id
         }
-        if let id = unseen.first {
+        // Only an app that shows AX no windows at all (Zoom in a meeting). An app with some windows
+        // AX lists and one it doesn't (Mimestream) is handled window by window as usual.
+        if axWindows.isEmpty, let id = unseen.first {
             guard opaqueApps[pid] == nil else { return }
             let ctx = windows[id]?.context ?? home(of: bundleID) ?? current
             opaqueApps[pid] = ctx
             note("\(app.localizedName ?? bundleID) shows windows AX can't move; it lives in \(ctx) and is hidden elsewhere")
-        } else if opaqueApps[pid] != nil, !app.isHidden {
+        } else if opaqueApps[pid] != nil, !axWindows.isEmpty || !app.isHidden {
             opaqueApps[pid] = nil
-            hiddenApps.remove(pid)
+            if hiddenApps.remove(pid) != nil, app.isHidden {
+                app.unhide()
+                note("showed \(app.localizedName ?? bundleID): AX can see its windows again")
+            }
         }
     }
 
