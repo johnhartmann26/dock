@@ -18,7 +18,7 @@ final class Slide {
     private var filter: SCContentFilter?
     private var display: SCDisplay?
     private var askedForPermission = false
-    private let slideTime: CFTimeInterval = 0.3
+    private let slideTime: CFTimeInterval = 0.2
 
     var permitted: Bool { CGPreflightScreenCaptureAccess() }
 
@@ -52,26 +52,28 @@ final class Slide {
             root.sublayers = [new, old]
             w.order(.below, relativeTo: dock.windowNumber)
             // The overlay has to be on screen before the windows move, or the new context flashes
-            // for a frame first. Push it to the window server and give it two frames.
+            // for a frame first. Push it to the window server and give it a frame.
             w.displayIfNeeded()
             CATransaction.flush()
-            try? await Task.sleep(for: .milliseconds(34))
+            try? await Task.sleep(for: .milliseconds(20))
 
+            let covered = Date()
             swap()
+            let moved = Date()
             // Let apps finish redrawing after their windows moved before taking the "after" picture.
-            try? await Task.sleep(for: .milliseconds(45))
+            try? await Task.sleep(for: .milliseconds(25))
             let after = await capture()
             let swapped = Date()
 
             let width = root.bounds.width
             let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
-            let duration: CFTimeInterval = reduceMotion ? 0.18 : slideTime
+            let duration: CFTimeInterval = reduceMotion ? 0.15 : slideTime
             let finish = { [weak self] in
                 w.orderOut(nil)
                 root.sublayers = nil
                 self?.running = false
                 let ms = { (a: Date, b: Date) in Int(b.timeIntervalSince(a) * 1000) }
-                self?.log("slide: snapshot \(ms(began, captured))ms, swap+snapshot \(ms(captured, swapped))ms, slide \(ms(swapped, Date()))ms")
+                self?.log("slide: snapshot \(ms(began, captured))ms, cover \(ms(captured, covered))ms, swap \(ms(covered, moved))ms, snapshot \(ms(moved, swapped))ms, slide \(ms(swapped, Date()))ms")
             }
 
             CATransaction.begin()

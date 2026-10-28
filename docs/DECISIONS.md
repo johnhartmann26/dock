@@ -304,3 +304,5 @@ The menu bar and the Dock stay live on top. Snapshots exist only in memory durin
 Re-recorded: no flash, and both screens slide together over about 0.3s (frames 1.00–1.30s). Measured: snapshot 29ms, swap plus second snapshot 162ms, slide 312ms.
 
 John confirmed the slide looks right on his screen.
+
+**Faster slide (John asked for it).** A switch took 0.5–0.65s from trigger to done: snapshot 25–107ms, overlay plus swap plus second snapshot 165–260ms, slide 310ms. Now the slide is 0.2s (0.15s fade with Reduce Motion), the wait before the swap is 20ms (one frame, down from 34ms), and the wait before the second snapshot is 25ms (down from 45ms). The log now splits the middle part: over five switches, cover 20–22ms, swap 45–65ms, second snapshot 46–53ms, slide 213–229ms, so about 0.4s in all. If the one-frame flash of the new context comes back, the 20ms wait goes back to 34ms.
