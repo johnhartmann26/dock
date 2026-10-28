@@ -14,7 +14,7 @@ final class WindowEngine {
         let id: CGWindowID
         let pid: pid_t
         let bundleID: String
-        let element: AXUIElement
+        var element: AXUIElement
         var context: String
         var parkedFrame: CGRect?       // set while hidden in the corner
         var lastFocus: Date
@@ -450,17 +450,33 @@ final class WindowEngine {
         return max(dx, dy, dw, dh) < 2
     }
 
-    /// The context an app's new windows belong to, if it has one (config `homes`).
+    /// The context an app's new windows belong to, if it has one: config `homes`, or else the one
+    /// context whose Dock has the app (Messages only in Personal opens its windows in Personal).
     func home(of bundleID: String) -> String? {
-        guard let id = config.homes?[bundleID], config.contexts.contains(where: { $0.id == id }) else { return nil }
-        return id
+        if let id = config.homes?[bundleID], config.contexts.contains(where: { $0.id == id }) { return id }
+        guard !isShared(bundleID) else { return nil }
+        let docks = config.contexts.filter { $0.apps.contains(bundleID) }
+        return docks.count == 1 ? docks[0].id : nil
     }
 
     private var newWindowApps: Set<String> { Self.fallbackNewWindowApps }
 
     // MARK: - Parking
 
+    /// Some apps (Granola) give a window that stays open a new accessibility handle, and the old one
+    /// stops answering, so the window can't be moved and shows in every context. Pick up its
+    /// current handle by window id.
+    private func refreshElement(_ id: CGWindowID) {
+        guard var w = windows[id], AX.frame(w.element) == nil,
+              let el = AX.windows(of: AX.app(w.pid)).first(where: { AX.windowID($0) == id }) else { return }
+        w.element = el
+        windows[id] = w
+        observeWindow(el, pid: w.pid, bundleID: w.bundleID)
+        note("picked up \(w.bundleID) \(id) again: its old handle stopped answering")
+    }
+
     private func park(_ id: CGWindowID) {
+        refreshElement(id)
         guard var w = windows[id], w.parkedFrame == nil,
               !AX.isMinimized(w.element), !AX.isFullScreen(w.element),
               let frame = AX.frame(w.element) else { return }
@@ -478,6 +494,8 @@ final class WindowEngine {
     }
 
     private func unpark(_ id: CGWindowID) {
+        guard windows[id]?.parkedFrame != nil else { return }
+        refreshElement(id)
         guard var w = windows[id], let frame = w.parkedFrame else { return }
         w.parkedFrame = nil
         windows[id] = w

@@ -56,9 +56,27 @@ final class Slide {
         return true
     }
 
+    /// The picture the slide is heading to, while it's on screen, so a second switch can carry on from it.
+    private weak var showing: CALayer?
+
     /// direction: +1 when moving to the context on the right (content moves left), -1 back.
-    func run(direction: Int, from: String, to: String, below dock: NSWindow, swap: @escaping () -> Void) {
-        guard !running else { swap(); return }
+    /// `duration` stretches the slide when the switch is known to take longer (a browser profile switch).
+    func run(direction: Int, from: String, to: String, below dock: NSWindow, duration wanted: CFTimeInterval? = nil,
+             swap: @escaping () -> Void) {
+        let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        let duration: CFTimeInterval = reduceMotion ? 0.12 : (wanted ?? slideTime)
+        if running {
+            // A second switch while the slide plays (a quick double swipe): carry on from where the
+            // picture is now to the next context, instead of finishing the old slide first.
+            if let w = window, w.isVisible, let root = w.contentView?.layer, let showing, let picture = pictures[to], !reduceMotion {
+                chain(direction: direction, to: to, picture: picture, window: w, root: root, from: showing,
+                      duration: duration, swap: swap)
+            } else {
+                drop()
+                swap()
+            }
+            return
+        }
         guard permitted else {
             if !askedForPermission {
                 askedForPermission = true
@@ -71,13 +89,16 @@ final class Slide {
         running = true
         holds = 0
         slideNumber += 1
+        let number = slideNumber
         Task { @MainActor in
             let began = Date()
             guard let before = await capture(), let screen = dock.screen ?? NSScreen.main else {
+                guard number == slideNumber else { return }
                 swap()
                 running = false
                 return
             }
+            guard number == slideNumber else { return }
             pictures[from] = before
             let captured = Date()
             let w = window ?? makeWindow()
@@ -94,31 +115,20 @@ final class Slide {
             w.displayIfNeeded()
             CATransaction.flush()
             try? await Task.sleep(for: .milliseconds(20))
+            guard number == slideNumber else { return }
             let covered = Date()
-
-            let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
-            let duration: CFTimeInterval = reduceMotion ? 0.12 : slideTime
             let ms = { (a: Date, b: Date) in Int(b.timeIntervalSince(a) * 1000) }
 
             if pictures[to] != nil {
                 // Slide to the remembered picture now; the windows move underneath while it plays
                 // (Core Animation keeps going while the main thread is busy moving them). Then the
                 // overlay fades out over the live windows, which hides anything that changed since.
+                showing = new
                 animate(old: old, new: new, in: root.bounds, direction: direction, duration: duration, fade: reduceMotion)
                 swap()
                 let moved = Date()
-                let left = duration - moved.timeIntervalSince(covered)
-                if left > 0 { try? await Task.sleep(for: .milliseconds(Int(left * 1000))) }
-                let held = Date()
-                let waited = await waitForHolds()
-                await NSAnimationContext.runAnimationGroup { ctx in
-                    ctx.duration = 0.08
-                    w.animator().alphaValue = 0
-                }
-                w.orderOut(nil)
-                root.sublayers = nil
-                running = false
-                log("slide: from memory, to \(to), first snapshot \(ms(began, captured))ms, cover \(ms(captured, covered))ms, swap \(ms(covered, moved))ms (during the slide)\(waited ? ", held \(ms(held, Date()))ms" : ""), total \(ms(began, Date()))ms")
+                guard let held = await finish(w, number: number, left: duration - moved.timeIntervalSince(covered)) else { return }
+                log("slide: from memory, to \(to), first snapshot \(ms(began, captured))ms, cover \(ms(captured, covered))ms, swap \(ms(covered, moved))ms (during the slide)\(held > 0.001 ? ", held \(Int(held * 1000))ms" : ""), total \(ms(began, Date()))ms")
                 return
             }
 
@@ -127,20 +137,90 @@ final class Slide {
             let moved = Date()
             // Let apps finish redrawing after their windows moved before taking the "after" picture.
             if await !waitForHolds() { try? await Task.sleep(for: .milliseconds(25)) }
+            guard number == slideNumber else { return }
             let after = await capture()
+            guard number == slideNumber else { return }
             if let after { pictures[to] = after }
             let swapped = Date()
             CATransaction.begin()
             CATransaction.setDisableActions(true)
             new.contents = after
             CATransaction.commit()
+            showing = new
             animate(old: old, new: new, in: root.bounds, direction: direction, duration: duration, fade: reduceMotion || after == nil) { [weak self] in
+                guard let self, number == self.slideNumber else { return }
                 w.orderOut(nil)
                 root.sublayers = nil
-                self?.running = false
-                self?.log("slide: first visit, to \(to), snapshot \(ms(began, captured))ms, cover \(ms(captured, covered))ms, swap \(ms(covered, moved))ms, snapshot \(ms(moved, swapped))ms, total \(ms(began, Date()))ms")
+                self.showing = nil
+                self.running = false
+                self.log("slide: first visit, to \(to), snapshot \(ms(began, captured))ms, cover \(ms(captured, covered))ms, swap \(ms(covered, moved))ms, snapshot \(ms(moved, swapped))ms, total \(ms(began, Date()))ms")
             }
         }
+    }
+
+    /// Keep sliding from wherever the pictures are now: everything on the overlay moves on by the
+    /// same amount, with the next context's picture coming in right behind the one that was arriving.
+    private func chain(direction: Int, to: String, picture: CGImage, window w: NSWindow, root: CALayer, from current: CALayer,
+                       duration: CFTimeInterval, swap: @escaping () -> Void) {
+        slideNumber += 1
+        holds = 0
+        let number = slideNumber
+        let began = Date()
+        let bounds = root.bounds
+        let shift = CGFloat(direction) * bounds.width
+        let x = current.presentation()?.position.x ?? current.position.x
+        let delta = bounds.midX - (x + shift)
+        let curve = CAMediaTimingFunction(controlPoints: 0.32, 0.0, 0.18, 1.0)
+        w.alphaValue = 1
+        let new = layer(picture, in: bounds)
+        CATransaction.begin()
+        for l in root.sublayers ?? [] {
+            let at = l.presentation()?.position.x ?? l.position.x
+            l.removeAllAnimations()
+            slideLayer(l, from: at, to: at + delta, duration: duration, curve: curve)
+        }
+        root.addSublayer(new)
+        slideLayer(new, from: x + shift, to: bounds.midX, duration: duration, curve: curve)
+        CATransaction.commit()
+        CATransaction.flush()
+        showing = new
+        swap()
+        Task { @MainActor in
+            guard let held = await finish(w, number: number, left: duration - Date().timeIntervalSince(began)) else { return }
+            log("slide: carried on to \(to)\(held > 0.001 ? ", held \(Int(held * 1000))ms" : ""), total \(Int(Date().timeIntervalSince(began) * 1000))ms")
+        }
+    }
+
+    /// Wait for the slide to end and anything holding the cover, then fade the cover out over the
+    /// live windows. Returns how long it was held, or nil if another switch took over meanwhile.
+    private func finish(_ w: NSWindow, number: Int, left: TimeInterval) async -> TimeInterval? {
+        if left > 0 { try? await Task.sleep(for: .milliseconds(Int(left * 1000))) }
+        guard number == slideNumber else { return nil }
+        let held = Date()
+        _ = await waitForHolds()
+        guard number == slideNumber else { return nil }
+        let heldFor = Date().timeIntervalSince(held)
+        await NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.08
+            w.animator().alphaValue = 0
+        }
+        guard number == slideNumber else { return nil }
+        w.orderOut(nil)
+        w.contentView?.layer?.sublayers = nil
+        showing = nil
+        running = false
+        return heldFor
+    }
+
+    /// Take the cover down now (a switch it can't carry on to).
+    private func drop() {
+        slideNumber += 1
+        holds = 0
+        window?.orderOut(nil)
+        window?.contentView?.layer?.sublayers = nil
+        showing = nil
+        running = false
+        log("slide: dropped for a switch it couldn't carry on to")
     }
 
     private func animate(old: CALayer, new: CALayer, in bounds: CGRect, direction: Int, duration: CFTimeInterval,
@@ -160,19 +240,22 @@ final class Slide {
             // from the side you're heading toward.
             let shift = CGFloat(direction) * bounds.width
             let curve = CAMediaTimingFunction(controlPoints: 0.32, 0.0, 0.18, 1.0)
-            for (l, from, to) in [(old, bounds.midX, bounds.midX - shift), (new, bounds.midX + shift, bounds.midX)] {
-                let a = CABasicAnimation(keyPath: "position.x")
-                a.fromValue = from
-                a.toValue = to
-                a.duration = duration
-                a.timingFunction = curve
-                l.position.x = to
-                l.add(a, forKey: "slide")
-            }
+            slideLayer(old, from: bounds.midX, to: bounds.midX - shift, duration: duration, curve: curve)
+            slideLayer(new, from: bounds.midX + shift, to: bounds.midX, duration: duration, curve: curve)
         }
         CATransaction.commit()
         // Hand the animation to the window server now, before the main thread gets busy.
         CATransaction.flush()
+    }
+
+    private func slideLayer(_ l: CALayer, from: CGFloat, to: CGFloat, duration: CFTimeInterval, curve: CAMediaTimingFunction) {
+        let a = CABasicAnimation(keyPath: "position.x")
+        a.fromValue = from
+        a.toValue = to
+        a.duration = duration
+        a.timingFunction = curve
+        l.position.x = to
+        l.add(a, forKey: "slide")
     }
 
     /// Drop cached capture targets after a display change.

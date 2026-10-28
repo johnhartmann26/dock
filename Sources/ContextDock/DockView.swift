@@ -76,7 +76,6 @@ struct DockView: View {
                 .padding(.bottom, DockMetrics.bottomGap)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .environment(\.colorScheme, .dark)
     }
 
     private var bar: some View {
@@ -91,7 +90,7 @@ struct DockView: View {
                 }
             }
             Rectangle()
-                .fill(.white.opacity(0.16))
+                .fill(.primary.opacity(0.16))
                 .frame(width: 1, height: 30)
                 .padding(.horizontal, 11)
             HStack(spacing: 7) {
@@ -110,9 +109,9 @@ struct DockView: View {
         .background(Frosted(cornerRadius: DockMetrics.corner))
         .overlay(
             RoundedRectangle(cornerRadius: DockMetrics.corner, style: .continuous)
-                .strokeBorder(.white.opacity(0.10), lineWidth: 0.5)
+                .strokeBorder(.primary.opacity(0.10), lineWidth: 0.5)
         )
-        .shadow(color: .black.opacity(0.28), radius: 18, y: 8)
+        .shadow(color: .black.opacity(0.2), radius: 18, y: 8)
         .animation(DockMotion.switch, value: state.current)
     }
 }
@@ -132,7 +131,7 @@ private struct ModeButton: View {
     var body: some View {
         Button(action: action) {
             ContextSymbol(name: context.symbol, size: 12.5)
-                .foregroundStyle(selected ? .white : .white.opacity(hover ? 0.9 : 0.55))
+                .foregroundStyle(selected ? AnyShapeStyle(.white) : AnyShapeStyle(.primary.opacity(hover ? 0.9 : 0.55)))
                 .frame(width: selected ? DockMetrics.pill : DockMetrics.control, height: DockMetrics.control)
                 .background {
                     if selected {
@@ -141,7 +140,7 @@ private struct ModeButton: View {
                             // Arrive solid and slide; the old pill just drops out (no orange/purple cross-fade).
                             .transition(.asymmetric(insertion: .identity, removal: .quickExit))
                     } else {
-                        Circle().fill(.white.opacity(hover ? 0.16 : 0.07))
+                        Circle().fill(.primary.opacity(hover ? 0.16 : 0.07))
                     }
                 }
                 .contentShape(Capsule())
@@ -152,7 +151,7 @@ private struct ModeButton: View {
             if hover {
                 Text("\(context.name)  ⌃⌥\(context.key)")
                     .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(.primary)
                     .padding(.horizontal, 10).padding(.vertical, 4)
                     .background(Frosted(cornerRadius: 12))
                     .fixedSize()
@@ -186,14 +185,14 @@ private struct AppTile: View {
                 .scaleEffect(hover ? 1.08 : 1, anchor: .bottom)
                 .offset(y: hover ? -2 : 0)
             Circle()
-                .fill(.white.opacity(running ? 0.75 : 0))
+                .fill(.primary.opacity(running ? 0.75 : 0))
                 .frame(width: 4, height: 4)
         }
         .overlay(alignment: .top) {
             if hover {
                 Text(app.name)
                     .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(.primary)
                     .padding(.horizontal, 10).padding(.vertical, 4)
                     .background(Frosted(cornerRadius: 12))
                     .fixedSize()
@@ -220,7 +219,7 @@ private struct AppTile: View {
     }
 }
 
-/// Dark frosted blur of whatever is behind the window, like the reference Dock. Liquid Glass
+/// Frosted blur of whatever is behind the window, light or dark with the system like the macOS Dock. Liquid Glass
 /// (`glassEffect`) fades to half opacity while it re-morphs during a width change, so it isn't used here.
 struct Frosted: NSViewRepresentable {
     var cornerRadius: CGFloat
@@ -231,7 +230,6 @@ struct Frosted: NSViewRepresentable {
 
     func makeNSView(context: Context) -> NSVisualEffectView {
         let v = NSVisualEffectView()
-        v.appearance = NSAppearance(named: .darkAqua)
         v.alphaValue = alpha
         v.material = material
         v.blendingMode = .behindWindow

@@ -162,17 +162,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             engine.switchTo(id, reason: reason)
             return
         }
-        guard engine.config.switchAnimation ?? true, !slide.running else {
-            // A swipe during a slide switches at once and wins over the slide's own switch.
+        guard engine.config.switchAnimation ?? true else {
             heading = nil
             engine.switchTo(id, reason: reason)
             return
         }
+        // A switch during a slide (a quick double swipe) carries the slide on to the new context.
         heading = id
-        slide.run(direction: to > from ? 1 : -1, from: engine.current, to: id, below: panel) { [weak self] in
+        // When a browser has to change profile, the switch takes about half a second longer; a
+        // slower slide fills that time instead of stopping on a still picture while it finishes.
+        let slow = changesProfile(from: engine.current, to: id) ? 0.6 : nil
+        slide.run(direction: to > from ? 1 : -1, from: engine.current, to: id, below: panel, duration: slow) { [weak self] in
             guard let self, self.heading == id else { return }
             self.heading = nil
             self.engine.switchTo(id, reason: reason)
+        }
+    }
+
+    /// Whether a running browser shows a different profile in `to` than in `from`.
+    private func changesProfile(from: String, to: String) -> Bool {
+        (engine.config.profiles ?? [:]).contains { bundleID, byContext in
+            byContext[to] != nil && byContext[to] != byContext[from]
+                && !NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).isEmpty
         }
     }
 
