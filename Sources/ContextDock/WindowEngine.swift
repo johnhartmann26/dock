@@ -155,6 +155,8 @@ final class WindowEngine {
         for (id, w) in windows where w.parkedFrame != nil {
             unpark(id)
         }
+        for pid in hiddenApps { NSRunningApplication(processIdentifier: pid)?.unhide() }
+        hiddenApps = []
         rescueStrays()
         persist()
     }
@@ -194,6 +196,60 @@ final class WindowEngine {
                 for w in list where w.context == current || isShared(w.bundleID) { unpark(w.id) }
                 for w in list where w.context != current && !isShared(w.bundleID) && !seenFullScreen.contains(w.id) { park(w.id) }
             }
+        }
+        applyOpaqueApps()
+    }
+
+    /// Apps whose normal windows are on screen but missing from AX (Zoom during a meeting lists
+    /// none), with the context they belong to. They can't be parked, so the whole app is hidden
+    /// (like ⌘H) while you're in another context and shown again when you come back. A call keeps
+    /// running while Zoom is hidden.
+    private var opaqueApps: [pid_t: String] = [:]
+    /// The ones ContextDock hid, so it only unhides what it hid.
+    private var hiddenApps: Set<pid_t> = []
+
+    private func applyOpaqueApps() {
+        for (pid, ctx) in opaqueApps {
+            guard let app = NSRunningApplication(processIdentifier: pid), !app.isTerminated else {
+                opaqueApps[pid] = nil
+                hiddenApps.remove(pid)
+                continue
+            }
+            if ctx == current {
+                if hiddenApps.remove(pid) != nil, app.isHidden {
+                    app.unhide()
+                    note("showed \(app.localizedName ?? "?"): its windows can't be moved, so it's hidden outside \(ctx)")
+                }
+            } else if !app.isHidden {
+                app.hide()
+                hiddenApps.insert(pid)
+                note("hid \(app.localizedName ?? "?"): its windows can't be moved, and it belongs to \(ctx)")
+            }
+        }
+    }
+
+    /// Notices an app that shows normal windows AX doesn't list, and forgets it once AX can see its
+    /// windows again (the meeting ended) or it has none.
+    private func checkOpaque(_ app: NSRunningApplication, axWindows: [AXUIElement], onScreen: [[String: Any]]) {
+        let pid = app.processIdentifier
+        guard let bundleID = app.bundleIdentifier, !isShared(bundleID) else { return }
+        let known = Set(axWindows.compactMap(AX.windowID))
+        let unseen = onScreen.compactMap { w -> CGWindowID? in
+            guard (w[kCGWindowOwnerPID as String] as? pid_t) == pid, (w[kCGWindowLayer as String] as? Int) == 0,
+                  (w[kCGWindowAlpha as String] as? Double ?? 1) > 0,
+                  let b = w[kCGWindowBounds as String] as? [String: Any],
+                  (b["Width"] as? Double ?? 0) >= 80, (b["Height"] as? Double ?? 0) >= 80,
+                  let id = w[kCGWindowNumber as String] as? CGWindowID, !known.contains(id) else { return nil }
+            return id
+        }
+        if let id = unseen.first {
+            guard opaqueApps[pid] == nil else { return }
+            let ctx = windows[id]?.context ?? home(of: bundleID) ?? current
+            opaqueApps[pid] = ctx
+            note("\(app.localizedName ?? bundleID) shows windows AX can't move; it lives in \(ctx) and is hidden elsewhere")
+        } else if opaqueApps[pid] != nil, !app.isHidden {
+            opaqueApps[pid] = nil
+            hiddenApps.remove(pid)
         }
     }
 
@@ -321,6 +377,14 @@ final class WindowEngine {
     }
 
     func moveFocusedWindow(to context: String) {
+        // An app ContextDock can only hide as a whole (Zoom in a meeting) moves as a whole.
+        if let pid = NSWorkspace.shared.frontmostApplication?.processIdentifier, opaqueApps[pid] != nil, context != current {
+            opaqueApps[pid] = context
+            note("moved \(NSRunningApplication(processIdentifier: pid)?.localizedName ?? "?") to \(context)")
+            applyOpaqueApps()
+            focusCurrent(preferring: nil)
+            return
+        }
         guard let id = focusedWindow, context != current else { return }
         move(id, to: context)
         ignoreFocusUntil = Date().addingTimeInterval(0.45)
@@ -543,16 +607,24 @@ final class WindowEngine {
     }
 
     private func rescan() {
+        let onScreen = Self.onScreenWindows()
         for app in NSWorkspace.shared.runningApplications where manages(app) {
             observe(app)
-            scan(app)
+            scan(app, onScreen: onScreen)
         }
+        applyOpaqueApps()
     }
 
-    private func scan(_ app: NSRunningApplication, asNew: Bool = false) {
+    private func scan(_ app: NSRunningApplication, asNew: Bool = false, onScreen: [[String: Any]]? = nil) {
         let pid = app.processIdentifier
-        for el in AX.windows(of: AX.app(pid)) { adopt(el, pid: pid, isNew: asNew) }
+        let list = AX.windows(of: AX.app(pid))
+        for el in list { adopt(el, pid: pid, isNew: asNew) }
         prune(pid)
+        checkOpaque(app, axWindows: list, onScreen: onScreen ?? Self.onScreenWindows())
+    }
+
+    private static func onScreenWindows() -> [[String: Any]] {
+        CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] ?? []
     }
 
     /// New windows join the current context, except ones we already knew from before a relaunch.
