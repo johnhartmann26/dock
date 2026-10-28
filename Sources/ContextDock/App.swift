@@ -30,6 +30,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var swipeUsed = false
     private let threeFinger = ThreeFingerSwipe()
     private let profiles = BrowserProfiles()
+    private let wallpapers = Wallpapers()
+    private var appearanceObservation: NSKeyValueObservation?
     /// The context whose browser profiles were last applied.
     private var profilesShown: String?
     private var lastStep: (reason: String, at: Date)?
@@ -86,6 +88,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         engine.start()
         threeFinger.log = { [weak self] in self?.engine.note($0) }
         profiles.log = { [weak self] in self?.engine.note($0) }
+        wallpapers.log = { [weak self] in self?.engine.note($0) }
+        wallpapers.apply(engine.config.wallpapers?[engine.current], context: engine.current)
+        // Light ↔ dark: show this context's other picture.
+        appearanceObservation = NSApp.observe(\.effectiveAppearance) { [weak self] _, _ in
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    guard let self else { return }
+                    self.wallpapers.apply(self.engine.config.wallpapers?[self.engine.current], context: self.engine.current)
+                }
+            }
+        }
         profiles.onStoleFocus = { [weak self] in self?.engine.refocus() }
         if profilesShown != engine.current {
             profilesShown = engine.current
@@ -258,6 +271,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             profilesShown = engine.current
             // During a slide, the overlay covers the browser coming to the front to switch profile,
             // and Dia's own profile animation after it (about a third of a second).
+            // The desktop picture changes under the slide too; give it a moment to draw.
+            if wallpapers.apply(engine.config.wallpapers?[engine.current], context: engine.current) {
+                let release = slide.hold()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.12, execute: release)
+            }
             let release = slide.hold()
             profiles.apply(engine.config.profiles, context: engine.current) { changed in
                 if changed { DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: release) } else { release() }
@@ -299,6 +317,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         move.submenu = sub
         menu.addItem(.separator())
+        if let ctx = engine.config.contexts.first(where: { $0.id == engine.current }) {
+            let wall = menu.addItem(withTitle: "Wallpaper for \(ctx.name)", action: nil, keyEquivalent: "")
+            let sub = NSMenu()
+            let set = engine.config.wallpapers?[ctx.id]
+            for (mode, title) in [("light", "Light Mode"), ("dark", "Dark Mode")] {
+                let current = mode == "light" ? set?.light : set?.dark
+                let name = current.map { " (\(URL(fileURLWithPath: $0).deletingPathExtension().lastPathComponent))" } ?? ""
+                let item = sub.addItem(withTitle: "Choose for \(title)…\(name)", action: #selector(chooseWallpaper(_:)), keyEquivalent: "")
+                item.representedObject = mode
+                item.target = self
+            }
+            if set != nil {
+                sub.addItem(.separator())
+                sub.addItem(withTitle: "Stop Changing the Wallpaper Here", action: #selector(clearWallpaper), keyEquivalent: "").target = self
+            }
+            wall.submenu = sub
+        }
         menu.addItem(withTitle: "Edit Dock Contents…", action: #selector(editConfig), keyEquivalent: ",").target = self
         menu.addItem(withTitle: "Show All Windows (Recover)", action: #selector(recover), keyEquivalent: "").target = self
         let login = menu.addItem(withTitle: "Open at Login", action: #selector(toggleLogin), keyEquivalent: "")
@@ -340,6 +375,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func moveWindow(_ sender: NSMenuItem) {
         let pair = sender.representedObject as! [Any]
         engine.move(pair[0] as! CGWindowID, to: pair[1] as! String)
+    }
+
+    @objc private func chooseWallpaper(_ sender: NSMenuItem) {
+        let mode = sender.representedObject as! String
+        let ctx = engine.current
+        let name = engine.config.contexts.first { $0.id == ctx }?.name ?? ctx
+        guard let path = Wallpapers.choose(title: "Wallpaper for \(name) in \(mode == "light" ? "Light" : "Dark") Mode") else { return }
+        var set = engine.config.wallpapers?[ctx] ?? Wallpaper()
+        if mode == "light" { set.light = path } else { set.dark = path }
+        var config = engine.config
+        config.wallpapers = (config.wallpapers ?? [:]).merging([ctx: set]) { $1 }
+        engine.config = config
+        config.save()
+        wallpapers.apply(set, context: ctx)
+        updateStatusItem()
+    }
+
+    @objc private func clearWallpaper() {
+        var config = engine.config
+        config.wallpapers?[engine.current] = nil
+        engine.config = config
+        config.save()
+        updateStatusItem()
     }
 
     @objc private func editConfig() { NSWorkspace.shared.open(DockConfig.url) }

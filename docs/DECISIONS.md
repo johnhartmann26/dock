@@ -374,3 +374,7 @@ On macOS 26 the Dock's background is AppKit's `NSGlassEffectView` (regular style
 Follow-up: in light mode the plain glass looked dark over anything but a white page. It now gets a 60% white tint in light mode (`DockGlassView.lightTint`), re-applied when the appearance changes; dark mode stays plain glass, which John said looks good.
 
 Follow-up: dark mode had the same problem the other way (plain glass looked light over anything but a dark background). It now gets a 45% black tint in dark mode (`DockGlassView.darkTint`).
+
+## A wallpaper per context, light and dark
+
+`wallpapers` in config.json maps a context to a light-mode and a dark-mode picture; the menu-bar menu sets them for the current context with a file picker (starts in /System/Library/Desktop Pictures). Set with `NSWorkspace.setDesktopImageURL` on every screen, keeping each screen's fill options, only when it differs (4-23ms). On a switch it's set in the swap, under the slide, which holds 120ms for it to draw; it's re-applied when the system appearance changes. A context without a picture shows your own desktop picture, saved (in ContextDock's defaults) the first time ContextDock replaces it, so a context without one doesn't keep the last context's. Tested with a Work picture: in Work it showed, back in Personal the original returned; the test picture was removed from the config afterwards.

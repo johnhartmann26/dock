@@ -25,6 +25,9 @@ struct DockConfig: Codable {
     /// Browsers whose windows switch profile with the context, by bundle id, then context id →
     /// profile name (Dia: one shared window that shows Solo in Personal and Work in Work).
     var profiles: [String: [String: String]]?
+    /// Desktop picture per context id, with a light-mode and a dark-mode picture (file paths; either
+    /// one alone is used in both modes). Contexts without one leave the desktop picture alone.
+    var wallpapers: [String: Wallpaper]?
 
     static let fallback = DockConfig(
         contexts: [
@@ -68,6 +71,13 @@ struct DockConfig: Codable {
         enc.outputFormatting = [.prettyPrinted, .sortedKeys]
         try? enc.encode(self).write(to: DockConfig.url, options: .atomic)
     }
+}
+
+struct Wallpaper: Codable, Hashable {
+    var light: String?
+    var dark: String?
+
+    func path(dark isDark: Bool) -> String? { isDark ? (dark ?? light) : (light ?? dark) }
 }
 
 /// An app tile in a context's Dock.

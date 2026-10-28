@@ -79,3 +79,5 @@ Window assignments and each parked window's exact frame are written to `~/Librar
 - **A faint sliver at the bottom right:** macOS keeps 1px × ~32px of each parked window, plus its shadow, on screen.
 - **Sleep and displays:** display off, lock and unlock were tested and held. Real system sleep and plugging/unplugging a display haven't been tested yet (the code re-pins parked windows on both).
 - **Restarting the Mac:** after a restart, windows get new ids, so they all start in the current context. Persistence across a restart is out of scope for v1.
+
+**A wallpaper per context:** the menu-bar menu has *Wallpaper for <context>*, with a picture for light mode and one for dark mode (either alone is used for both). It changes while the slide covers the screen, and again when your Mac switches between light and dark. A context without its own picture shows the desktop picture you had before ContextDock first changed it. In config.json: `"wallpapers": {"work": {"light": "/path/a.heic", "dark": "/path/b.heic"}}`.
