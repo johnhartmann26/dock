@@ -29,6 +29,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var swipeDistance: CGFloat = 0
     private var swipeUsed = false
     private let threeFinger = ThreeFingerSwipe()
+    private let profiles = BrowserProfiles()
+    /// The context whose browser profiles were last applied.
+    private var profilesShown: String?
     private var lastStep: (reason: String, at: Date)?
     /// The context a slide is on its way to, until its windows have moved.
     private var heading: String?
@@ -82,6 +85,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func begin() {
         engine.start()
         threeFinger.log = { [weak self] in self?.engine.note($0) }
+        profiles.log = { [weak self] in self?.engine.note($0) }
+        if profilesShown != engine.current {
+            profilesShown = engine.current
+            profiles.apply(engine.config.profiles, context: engine.current)
+        }
+        // A browser that just opened shows this context's profile once its window is up.
+        NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didLaunchApplicationNotification, object: nil, queue: .main) { [weak self] n in
+            let app = n.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
+            MainActor.assumeIsolated {
+                guard let self, let id = app?.bundleIdentifier, self.engine.config.profiles?[id] != nil else { return }
+                for delay in [1.5, 4.0] {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                        self.profiles.apply(self.engine.config.profiles?.filter { $0.key == id }, context: self.engine.current)
+                    }
+                }
+            }
+        }
         threeFinger.onSwipe = { [weak self] dir in self?.step(fingers: dir, reason: "3-finger swipe") }
         threeFinger.begin()
         slide.prepare()
@@ -200,6 +220,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - UI sync
 
     private func syncUI() {
+        if profilesShown != engine.current {
+            profilesShown = engine.current
+            profiles.apply(engine.config.profiles, context: engine.current)
+        }
         state.show(engine.current)
         let ctx = engine.current
         state.running = Set(state.config.contexts.first { $0.id == ctx }?.apps.filter { engine.hasWindows($0, in: ctx) } ?? [])

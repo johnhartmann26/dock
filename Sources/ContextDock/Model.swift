@@ -22,6 +22,9 @@ struct DockConfig: Codable {
     var homes: [String: String]?
     /// The slide on switches you make (on unless set to false).
     var switchAnimation: Bool?
+    /// Browsers whose windows switch profile with the context, by bundle id, then context id →
+    /// profile name (Dia: one shared window that shows Solo in Personal and Work in Work).
+    var profiles: [String: [String: String]]?
 
     static let fallback = DockConfig(
         contexts: [
@@ -30,16 +33,17 @@ struct DockConfig: Codable {
                                "com.apple.Notes", "com.hnc.Discord"],
                         key: "1"),
             DockContext(id: "work", name: "Work", symbol: "briefcase.fill", color: "#3277BB",
-                        apps: ["com.google.Chrome", "com.mimestream.Mimestream", "com.tinyspeck.slackmacgap",
+                        apps: ["company.thebrowser.dia", "com.google.Chrome", "com.mimestream.Mimestream", "com.tinyspeck.slackmacgap",
                                "com.granola.app", "com.flexibits.fantastical2.mac"],
                         key: "2"),
             DockContext(id: "agents", name: "Agents", symbol: "robot", color: "#7B5CC4",
-                        apps: ["dev.serafim.fast", "com.anthropic.claudefordesktop", "com.openai.codex",
+                        apps: ["company.thebrowser.dia", "dev.serafim.fast", "com.anthropic.claudefordesktop", "com.openai.codex",
                                "com.microsoft.VSCode", "com.apple.Terminal"],
                         key: "3"),
         ],
-        shared: ["com.apple.Music", "com.1password.1password", "com.apple.finder"],
-        homes: ["com.google.Chrome": "work", "company.thebrowser.dia": "personal", "dev.serafim.fast": "agents"]
+        shared: ["com.apple.Music", "com.1password.1password", "com.apple.finder", "company.thebrowser.dia"],
+        homes: ["com.google.Chrome": "work", "dev.serafim.fast": "agents"],
+        profiles: ["company.thebrowser.dia": ["personal": "Solo", "work": "Work", "agents": "Work"]]
     )
 
     static var url: URL {

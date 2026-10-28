@@ -41,7 +41,9 @@ On first launch, approve **ContextDock** in System Settings > Privacy & Security
 
 **What follows focus:** if a window from another context comes forward, the Dock switches to that context. That covers ⌘-Tab, clicking the native Dock, notifications, and links that land in an existing window.
 
-**Home apps (one browser per context):** `homes` in config.json maps an app to a context, for example Safari → Personal, Dia → Work, Yab → Agents. A new window from a home app goes to its home context and the Dock switches there, so a link a router like Velja opens in Safari takes you to Personal from anywhere. Windows you open on purpose (a Dock click or New Window Here) stay where you are.
+**Home apps (one browser per context):** `homes` in config.json maps an app to a context, for example Chrome → Work and Yab → Agents. A new window from a home app goes to its home context and the Dock switches there, so a link a router like Velja opens in Chrome takes you to Work from anywhere. Windows you open on purpose (a Dock click or New Window Here) stay where you are.
+
+**One browser window, a profile per context:** `profiles` maps a browser to a profile per context, for example `"company.thebrowser.dia": {"personal": "Solo", "work": "Work", "agents": "Work"}`. Put the browser in `shared` too, so its window shows in every context. On each switch ContextDock tells every window of that browser to show the context's profile, so links open in the right one. This uses the browser's AppleScript `focus` command (Dia has it; Chrome doesn't). macOS asks once whether ContextDock may control the browser, under Privacy & Security > Automation. The switch runs only when the browser is already open, and takes about 0.2s off the main thread.
 
 **Switch animation:** switches you make slide like Spaces: the old screen slides out and the new one slides in. It uses screen snapshots, so it needs Screen Recording permission; until that's granted, switches are instant. Set `"switchAnimation": false` in config.json to turn it off. With Reduce Motion on, it fades instead.
 

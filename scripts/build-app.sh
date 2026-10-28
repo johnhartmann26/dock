@@ -18,5 +18,5 @@ if [[ -z "${CODESIGN_IDENTITY:-}" && ! -s .signing-identity ]]; then
   security find-identity -v -p codesigning | grep -m1 'Apple Development' | awk '{print $2}' > .signing-identity || true
 fi
 IDENTITY="${CODESIGN_IDENTITY:-$(cat .signing-identity 2>/dev/null)}"
-codesign --force --options runtime --sign "${IDENTITY:--}" "$APP"
+codesign --force --options runtime --entitlements Resources/ContextDock.entitlements --sign "${IDENTITY:--}" "$APP"
 echo "Built $APP (signed: ${IDENTITY:-ad-hoc})"
