@@ -32,7 +32,7 @@ final class Slide {
     /// The overlay stays up until it's done, at most `holdLimit`, so you don't see it happen.
     private var holds = 0
     private var slideNumber = 0
-    private let holdLimit: TimeInterval = 0.7
+    private let holdLimit: TimeInterval = 1.0
 
     /// Keep the overlay up until the returned closure is called. Does nothing when no slide is playing.
     func hold() -> () -> Void {

@@ -223,8 +223,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func syncUI() {
         if profilesShown != engine.current {
             profilesShown = engine.current
-            // During a slide, the overlay covers the browser coming to the front to switch profile.
-            profiles.apply(engine.config.profiles, context: engine.current, done: slide.hold())
+            // During a slide, the overlay covers the browser coming to the front to switch profile,
+            // and Dia's own profile animation after it (about a third of a second).
+            let release = slide.hold()
+            profiles.apply(engine.config.profiles, context: engine.current) { changed in
+                if changed { DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: release) } else { release() }
+            }
         }
         state.show(engine.current)
         let ctx = engine.current

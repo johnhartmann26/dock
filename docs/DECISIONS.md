@@ -352,3 +352,5 @@ While testing, the context's own window often didn't come forward after a switch
 ## The slide covers Dia's profile switch
 
 Dia's `focus` command brings Dia to the front, redraws it in the other profile, and then ContextDock puts the context's own window back. That took 150-400ms and ran after the slide had already ended, so you saw Dia flash on top. Instead of a longer slide for every switch, the slide's overlay now stays up until the profile switch and the refocus are done (at most 0.7s, plus 40ms to draw), then fades out. Switches that don't change the profile (Work to Agents) aren't held at all. On a first visit the "after" picture is taken once the profile has switched, so it's remembered correctly.
+
+Follow-up: Dia also plays its own profile animation inside its window for a moment after `focus` returns, which still showed as a slight flicker. The profile script now reports whether a window actually changed profile, and when one did, the overlay holds 0.35s longer (cap raised to 1s). Personal to Work now takes about 0.75s in all; Work to Agents (same profile) is unchanged at about 0.3s.

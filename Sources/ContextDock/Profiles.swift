@@ -10,28 +10,39 @@ import AppKit
 /// `onStoleFocus` lets the engine focus the context's own window again (not the app that was in
 /// front before: right after a switch that's still the old context's app, and following it would
 /// switch you back). `done` runs once every browser has switched and the focus is put back, so the
-/// slide can keep covering the screen until then.
+/// slide can keep covering the screen until then; it says whether any window changed profile (Dia
+/// then still plays its own profile animation for a moment).
 @MainActor
 final class BrowserProfiles {
     var log: (String) -> Void = { _ in }
     var onStoleFocus: () -> Void = {}
     private let queue = DispatchQueue(label: "ContextDock.profiles")
 
-    func apply(_ profiles: [String: [String: String]]?, context: String, done: @escaping () -> Void = {}) {
+    func apply(_ profiles: [String: [String: String]]?, context: String, done: @escaping (_ changed: Bool) -> Void = { _ in }) {
         let browsers = (profiles ?? [:]).compactMap { bundleID, byContext in
             byContext[context].map { (bundleID, $0) }
         }.filter { !NSRunningApplication.runningApplications(withBundleIdentifier: $0.0).isEmpty }
-        guard !browsers.isEmpty else { done(); return }
+        guard !browsers.isEmpty else { done(false); return }
         var left = browsers.count
-        let finished = { left -= 1; if left == 0 { done() } }
+        var changed = false
+        let finished = { (switched: Bool) in
+            changed = changed || switched
+            left -= 1
+            if left == 0 { done(changed) }
+        }
         for (bundleID, profile) in browsers {
             let name = profile.replacingOccurrences(of: "\"", with: "\\\"")
             let source = """
+            set switched to false
             tell application id "\(bundleID)"
                 repeat with w in windows
-                    if name of active profile of w is not "\(name)" then focus (profile "\(name)" of w)
+                    if name of active profile of w is not "\(name)" then
+                        focus (profile "\(name)" of w)
+                        set switched to true
+                    end if
                 end repeat
             end tell
+            return switched
             """
             let front = NSWorkspace.shared.frontmostApplication
             queue.async { [weak self] in
@@ -46,14 +57,14 @@ final class BrowserProfiles {
                     DispatchQueue.main.async {
                         MainActor.assumeIsolated {
                             self?.log("profile: no permission to control \(bundleID) (\(status)); allow ContextDock in System Settings > Privacy & Security > Automation")
-                            finished()
+                            finished(false)
                         }
                     }
                     return
                 }
                 let began = Date()
                 var error: NSDictionary?
-                NSAppleScript(source: source)?.executeAndReturnError(&error)
+                let switched = NSAppleScript(source: source)?.executeAndReturnError(&error).booleanValue ?? false
                 let ms = Int(Date().timeIntervalSince(began) * 1000)
                 let message = error?[NSAppleScript.errorMessage] as? String
                 DispatchQueue.main.async {
@@ -63,8 +74,8 @@ final class BrowserProfiles {
                             self?.onStoleFocus()
                         }
                         self?.log(message.map { "profile: \(profile) in \(bundleID) failed: \($0)" }
-                                  ?? "profile: \(profile) in \(bundleID), \(ms)ms")
-                        finished()
+                                  ?? "profile: \(profile) in \(bundleID), \(switched ? "switched" : "already"), \(ms)ms")
+                        finished(switched)
                     }
                 }
             }
