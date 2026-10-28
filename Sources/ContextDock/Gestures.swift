@@ -102,50 +102,60 @@ private struct Touch {
 
 /// Gesture state, touched only on the multitouch callback thread.
 ///
-/// A gesture starts when three fingers are down and follows *those* fingers by id, so a finger
-/// landing late, lifting early or a thumb grazing the pad doesn't restart it. It ends when every
-/// finger is up, when fewer than three remain after it fired, or when a fourth arrives (four
-/// fingers is the Spaces swipe).
+/// Counts the fingers that are *moving*, each measured from where it landed, so a thumb or palm
+/// resting on the pad doesn't count. Three fingers moving the same way sideways is a swipe. A fourth
+/// finger moving with them is the Spaces swipe and is left alone. After a swipe fires, it re-arms
+/// once fewer than three fingers are down.
 private struct SwipeTracker {
-    var start: [Int32: (x: Float, y: Float)] = [:]
+    var landed: [Int32: (x: Float, y: Float)] = [:]
     var fired = false
     var abandoned = false
+    /// The most fingers seen moving in this touch, for the log when nothing fired.
+    var mostMoving = 0
 
-    mutating func update(_ touches: [Touch]) -> Int? {
+    enum Outcome { case swipe(Int), missed(String) }
+
+    mutating func update(_ touches: [Touch]) -> Outcome? {
+        let ids = Set(touches.map(\.id))
+        landed = landed.filter { ids.contains($0.key) }
+        for t in touches where landed[t.id] == nil { landed[t.id] = (t.x, t.y) }
+
         if touches.isEmpty {
-            start = [:]
+            let report: Outcome? = (!fired && !abandoned && mostMoving >= 3)
+                ? .missed("\(mostMoving) fingers moved, no swipe") : nil
             fired = false
             abandoned = false
+            mostMoving = 0
+            return report
+        }
+        if fired || abandoned {
+            // Re-arm once fewer than three fingers remain; whatever is still down starts from here.
+            if touches.count < 3 {
+                fired = false
+                abandoned = false
+                mostMoving = 0
+                for t in touches { landed[t.id] = (t.x, t.y) }
+            }
             return nil
         }
-        if touches.count >= 4 { abandoned = true }
-        // A finger left resting after a swipe mustn't block the next one: once the swipe has fired
-        // (or turned into a four-finger gesture) and fewer than three fingers remain, start over.
-        if (fired || abandoned), touches.count < 3 {
-            start = [:]
-            fired = false
-            abandoned = false
-            return nil
-        }
-        guard !abandoned, !fired else { return nil }
-        if start.isEmpty {
-            guard touches.count == 3 else { return nil }
-            for t in touches { start[t.id] = (t.x, t.y) }
-            return nil
-        }
-        var dx: Float = 0, dy: Float = 0, n: Float = 0
+
+        var left = 0, right = 0, stirring = 0
         for t in touches {
-            guard let s = start[t.id] else { continue }
-            dx += t.x - s.x
-            dy += t.y - s.y
-            n += 1
+            guard let l = landed[t.id] else { continue }
+            let dx = t.x - l.x, dy = t.y - l.y
+            if abs(dx) > 0.035 || abs(dy) > 0.035 { stirring += 1 }
+            guard abs(dx) > 0.07, abs(dx) > abs(dy) * 1.2 else { continue }
+            if dx < 0 { left += 1 } else { right += 1 }
         }
-        guard n >= 2 else { return nil }
-        dx /= n
-        dy /= n
-        guard abs(dx) > 0.08, abs(dx) > abs(dy) * 1.2 else { return nil }
+        mostMoving = max(mostMoving, stirring)
+        if stirring >= 4 {
+            abandoned = true
+            return .missed("4 fingers moving (Spaces swipe)")
+        }
+        // Three sideways together, and nothing else moving with them.
+        guard stirring == 3, left == 3 || right == 3 else { return nil }
         fired = true
-        return dx < 0 ? -1 : 1
+        return .swipe(left == 3 ? -1 : 1)
     }
 }
 
@@ -176,10 +186,13 @@ private let contactCallback: @convention(c) (Int32, UnsafeMutableRawPointer?, In
         let seen = states.map(String.init).joined(separator: ",")
         DispatchQueue.main.async { MainActor.assumeIsolated { ThreeFingerSwipe.shared?.log("three-finger swipe: first touch states \(seen)") } }
     }
-    if let dir = tracker.update(touches) {
-        DispatchQueue.main.async {
-            MainActor.assumeIsolated { ThreeFingerSwipe.shared?.fire(dir) }
-        }
+    switch tracker.update(touches) {
+    case .swipe(let dir)?:
+        DispatchQueue.main.async { MainActor.assumeIsolated { ThreeFingerSwipe.shared?.fire(dir) } }
+    case .missed(let why)?:
+        DispatchQueue.main.async { MainActor.assumeIsolated { ThreeFingerSwipe.shared?.log("three-finger swipe: \(why)") } }
+    case nil:
+        break
     }
     return 0
 }
