@@ -161,12 +161,12 @@ final class WindowEngine {
 
     // MARK: - Switching
 
-    /// The last few switches (and wake/display passes) and why, for `contextdock://dump`.
+    /// The last 60 switches, swipes, slides (and wake/display passes) and why, for `contextdock://dump`.
     private var recentSwitches: [String] = []
 
     func note(_ event: String) {
         recentSwitches.append("\(Date().formatted(.iso8601.time(includingFractionalSeconds: true))) \(event)")
-        recentSwitches = Array(recentSwitches.suffix(20))
+        recentSwitches = Array(recentSwitches.suffix(60))
     }
 
     func switchTo(_ target: String, focusing preferred: CGWindowID? = nil, reason: String = "dock") {

@@ -27,7 +27,6 @@ final class ThreeFingerSwipe {
     private var start: Start?
     private var stop: Stop?
     private var createList: CreateList?
-    private var warnedSystemOwnsGesture = false
 
     fileprivate static var shared: ThreeFingerSwipe?
 
@@ -88,13 +87,9 @@ final class ThreeFingerSwipe {
 
     fileprivate func fire(_ direction: Int) {
         if systemOwnsThreeFingerSwipe() {
-            if !warnedSystemOwnsGesture {
-                warnedSystemOwnsGesture = true
-                log("three-finger swipe ignored: macOS still uses it (set Swipe between full-screen apps to four fingers)")
-            }
+            log("three-finger swipe ignored: macOS still uses it (set Swipe between full-screen apps to four fingers)")
             return
         }
-        warnedSystemOwnsGesture = false
         onSwipe(direction)
     }
 }
@@ -109,7 +104,8 @@ private struct Touch {
 ///
 /// A gesture starts when three fingers are down and follows *those* fingers by id, so a finger
 /// landing late, lifting early or a thumb grazing the pad doesn't restart it. It ends when every
-/// finger is up, or when a fourth arrives (four fingers is the Spaces swipe).
+/// finger is up, when fewer than three remain after it fired, or when a fourth arrives (four
+/// fingers is the Spaces swipe).
 private struct SwipeTracker {
     var start: [Int32: (x: Float, y: Float)] = [:]
     var fired = false
@@ -123,6 +119,14 @@ private struct SwipeTracker {
             return nil
         }
         if touches.count >= 4 { abandoned = true }
+        // A finger left resting after a swipe mustn't block the next one: once the swipe has fired
+        // (or turned into a four-finger gesture) and fewer than three fingers remain, start over.
+        if (fired || abandoned), touches.count < 3 {
+            start = [:]
+            fired = false
+            abandoned = false
+            return nil
+        }
         guard !abandoned, !fired else { return nil }
         if start.isEmpty {
             guard touches.count == 3 else { return nil }

@@ -30,6 +30,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var swipeUsed = false
     private let threeFinger = ThreeFingerSwipe()
     private var lastStep: (reason: String, at: Date)?
+    /// The context a slide is on its way to, until its windows have moved.
+    private var heading: String?
     private lazy var slide: Slide = {
         let s = Slide()
         s.log = { [weak self] in self?.engine.note($0) }
@@ -112,12 +114,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// A three-finger swipe over the Dock also arrives as the Dock's scroll, so once either kind of
     /// swipe steps, the other is ignored for a moment: one gesture, one step.
     private func step(fingers: Int, reason: String) {
-        if let last = lastStep, last.reason != reason, Date().timeIntervalSince(last.at) < 0.6 { return }
+        let way = fingers < 0 ? "right" : "left"
+        if let last = lastStep, last.reason != reason, Date().timeIntervalSince(last.at) < 0.6 {
+            engine.note("\(reason) \(way): ignored, same gesture as the \(last.reason)")
+            return
+        }
         lastStep = (reason, Date())
         let ids = engine.config.contexts.map(\.id)
-        guard let i = ids.firstIndex(of: engine.current) else { return }
+        // During a slide the windows may not have moved yet, so count from where it's heading.
+        let here = heading ?? engine.current
+        guard let i = ids.firstIndex(of: here) else { return }
         let next = fingers < 0 ? i + 1 : i - 1
-        if ids.indices.contains(next) { userSwitch(to: ids[next], reason: reason) }
+        guard ids.indices.contains(next) else {
+            engine.note("\(reason) \(way): already at the end (\(here))")
+            return
+        }
+        userSwitch(to: ids[next], reason: reason)
     }
 
     /// A switch you asked for (Dock, hotkey, swipe, menu) plays the slide; switches an app
@@ -125,15 +137,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func userSwitch(to id: String, reason: String) {
         let ids = engine.config.contexts.map(\.id)
         guard id != engine.current, let from = ids.firstIndex(of: engine.current), let to = ids.firstIndex(of: id) else {
+            heading = nil
             engine.switchTo(id, reason: reason)
             return
         }
         guard engine.config.switchAnimation ?? true, !slide.running else {
+            // A swipe during a slide switches at once and wins over the slide's own switch.
+            heading = nil
             engine.switchTo(id, reason: reason)
             return
         }
-        slide.run(direction: to > from ? 1 : -1, below: panel) { [weak self] in
-            self?.engine.switchTo(id, reason: reason)
+        heading = id
+        slide.run(direction: to > from ? 1 : -1, from: engine.current, to: id, below: panel) { [weak self] in
+            guard let self, self.heading == id else { return }
+            self.heading = nil
+            self.engine.switchTo(id, reason: reason)
         }
     }
 
