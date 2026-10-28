@@ -19,7 +19,8 @@ final class Slide {
     private var filter: SCContentFilter?
     private var display: SCDisplay?
     private var askedForPermission = false
-    private let slideTime: CFTimeInterval = 0.15
+    /// The same for every switch, long enough to cover a browser changing profile underneath.
+    private let slideTime: CFTimeInterval = 0.6
 
     var permitted: Bool { CGPreflightScreenCaptureAccess() }
 
@@ -60,11 +61,9 @@ final class Slide {
     private weak var showing: CALayer?
 
     /// direction: +1 when moving to the context on the right (content moves left), -1 back.
-    /// `duration` stretches the slide when the switch is known to take longer (a browser profile switch).
-    func run(direction: Int, from: String, to: String, below dock: NSWindow, duration wanted: CFTimeInterval? = nil,
-             swap: @escaping () -> Void) {
+    func run(direction: Int, from: String, to: String, below dock: NSWindow, swap: @escaping () -> Void) {
         let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
-        let duration: CFTimeInterval = reduceMotion ? 0.12 : (wanted ?? slideTime)
+        let duration: CFTimeInterval = reduceMotion ? 0.12 : slideTime
         if running {
             // A second switch while the slide plays (a quick double swipe): carry on from where the
             // picture is now to the next context, instead of finishing the old slide first.

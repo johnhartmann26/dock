@@ -183,10 +183,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // A switch during a slide (a quick double swipe) carries the slide on to the new context.
         heading = id
         watchMainThread(label: "\(engine.current) -> \(id)")
-        // When a browser has to change profile, the switch takes about half a second longer; a
-        // slower slide fills that time instead of stopping on a still picture while it finishes.
-        let slow = changesProfile(from: engine.current, to: id) ? 0.6 : nil
-        slide.run(direction: to > from ? 1 : -1, from: engine.current, to: id, below: panel, duration: slow) { [weak self] in
+        slide.run(direction: to > from ? 1 : -1, from: engine.current, to: id, below: panel) { [weak self] in
             guard let self, self.heading == id else { return }
             self.heading = nil
             self.engine.switchTo(id, reason: reason)
@@ -212,14 +209,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         RunLoop.main.add(timer, forMode: .common)
-    }
-
-    /// Whether a running browser shows a different profile in `to` than in `from`.
-    private func changesProfile(from: String, to: String) -> Bool {
-        (engine.config.profiles ?? [:]).contains { bundleID, byContext in
-            byContext[to] != nil && byContext[to] != byContext[from]
-                && !NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).isEmpty
-        }
     }
 
     func applicationWillTerminate(_ notification: Notification) {

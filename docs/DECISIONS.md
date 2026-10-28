@@ -378,3 +378,11 @@ Follow-up: dark mode had the same problem the other way (plain glass looked ligh
 ## A wallpaper per context, light and dark
 
 `wallpapers` in config.json maps a context to a light-mode and a dark-mode picture; the menu-bar menu sets them for the current context with a file picker (starts in /System/Library/Desktop Pictures). Set with `NSWorkspace.setDesktopImageURL` on every screen, keeping each screen's fill options, only when it differs (4-23ms). On a switch it's set in the swap, under the slide, which holds 120ms for it to draw; it's re-applied when the system appearance changes. A context without a picture shows your own desktop picture, saved (in ContextDock's defaults) the first time ContextDock replaces it, so a context without one doesn't keep the last context's. Tested with a Work picture: in Work it showed, back in Personal the original returned; the test picture was removed from the config afterwards.
+
+## Seeded wallpapers in each context's color
+
+The system's colored wallpapers (Mac Blue, iMac Purple…) are single light images with no dark version, and only approximate the Dock colors. `scripts/make-wallpapers.swift` draws a pair per context from config.json's colors instead: light is a pale wash with softer fields of the color and neighbouring hues; dark is near-black in the color with glowing fields. Amber turns olive when shifted toward yellow in the dark, so Personal's hues only shift toward red. Written as HEIC (2-4.5MB each) to ~/Library/Application Support/ContextDock/Wallpapers and set in John's config for all three contexts (config backed up as config.json.before-wallpapers).
+
+## One slide length for every switch
+
+Work ↔ Agents slid in 0.15s while switches that change Dia's profile slid in 0.6s, and John found the difference jarring ("the personal is fine if that's always the duration"). Every switch now slides over 0.6s; the per-switch duration is gone.
