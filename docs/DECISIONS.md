@@ -386,3 +386,7 @@ The system's colored wallpapers (Mac Blue, iMac Purple…) are single light imag
 ## One slide length for every switch
 
 Work ↔ Agents slid in 0.15s while switches that change Dia's profile slid in 0.6s, and John found the difference jarring ("the personal is fine if that's always the duration"). Every switch now slides over 0.6s; the per-switch duration is gone.
+
+## Closed windows that apps keep (Granola)
+
+Granola doesn't destroy its window when you click the red button; it hides it. Coming back to Work, ContextDock focused the context's most recently used window, which was that hidden Granola window, and focusing it brought it back. Reproduced (open Granola in Work, close it, go to Personal and back: it reappeared), fixed, and re-run (it stays closed across two round trips). A window that isn't on screen and isn't parked, minimized or fullscreen now counts as closed by its app: it's skipped when picking the window to focus after a switch, and a Dock click treats the app as having no window here (so it gets the app's normal reopen).

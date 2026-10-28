@@ -274,9 +274,10 @@ final class WindowEngine {
         }
         // Fullscreen windows are skipped: focusing one jumps to its Space instead of showing this
         // context's desktop. They stay a swipe or ⌘-Tab away.
+        let showing = Self.onScreenIDs()
         let candidates = windows.values
             .filter { $0.context == current && !isShared($0.bundleID) && !AX.isMinimized($0.element) }
-            .filter { !AX.isFullScreen($0.element) }
+            .filter { !AX.isFullScreen($0.element) && !closedByApp($0, showing: showing) }
             .sorted { $0.lastFocus > $1.lastFocus }
         if let top = candidates.first {
             focus(top.id)
@@ -308,8 +309,10 @@ final class WindowEngine {
 
     /// Clicking an app in the current context's Dock.
     func openApp(_ bundleID: String) {
+        let showing = Self.onScreenIDs()
         let mine = windows.values
             .filter { $0.bundleID == bundleID && ($0.context == current || isShared(bundleID)) && !demoHidden($0.id) }
+            .filter { !closedByApp($0, showing: showing) }
             .sorted { $0.lastFocus > $1.lastFocus }
         if let top = mine.first(where: { !AX.isMinimized($0.element) }) ?? mine.first {
             ignoreFocusUntil = Date().addingTimeInterval(0.3)
@@ -660,6 +663,16 @@ final class WindowEngine {
         for el in list { adopt(el, pid: pid, isNew: asNew) }
         prune(pid)
         checkOpaque(app, axWindows: list, onScreen: onScreen ?? Self.onScreenWindows())
+    }
+
+    /// Some apps keep a window around when you close it, just hidden (Granola). Focusing it brings
+    /// it back, so a window that isn't on screen, minimized, parked or fullscreen counts as closed.
+    private func closedByApp(_ w: Window, showing: Set<CGWindowID>) -> Bool {
+        !showing.contains(w.id) && w.parkedFrame == nil && !AX.isMinimized(w.element) && !AX.isFullScreen(w.element)
+    }
+
+    private static func onScreenIDs() -> Set<CGWindowID> {
+        Set(onScreenWindows().compactMap { $0[kCGWindowNumber as String] as? CGWindowID })
     }
 
     private static func onScreenWindows() -> [[String: Any]] {
