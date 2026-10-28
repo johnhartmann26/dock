@@ -18,7 +18,7 @@ final class Slide {
     private var filter: SCContentFilter?
     private var display: SCDisplay?
     private var askedForPermission = false
-    private let slideTime: CFTimeInterval = 0.2
+    private let slideTime: CFTimeInterval = 0.15
 
     var permitted: Bool { CGPreflightScreenCaptureAccess() }
 
@@ -67,7 +67,7 @@ final class Slide {
 
             let width = root.bounds.width
             let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
-            let duration: CFTimeInterval = reduceMotion ? 0.15 : slideTime
+            let duration: CFTimeInterval = reduceMotion ? 0.12 : slideTime
             let finish = { [weak self] in
                 w.orderOut(nil)
                 root.sublayers = nil
