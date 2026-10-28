@@ -53,6 +53,8 @@ extension EnvironmentValues {
 enum DockMetrics {
     static let icon: CGFloat = 40
     static let control: CGFloat = 30
+    /// Width of the selected context's pill.
+    static let pill: CGFloat = 42
     static let corner: CGFloat = 21
     static let bottomGap: CGFloat = 8
     static let padV: CGFloat = 7
@@ -115,7 +117,8 @@ struct DockView: View {
     }
 }
 
-/// A context control: a quiet circle, or a filled pill with its name when selected.
+/// A context control: a quiet circle, or a filled pill when selected. No name in the pill, so the
+/// Dock stays narrow and keeps its width when you switch; the name shows above it on hover, like apps.
 private struct ModeButton: View {
     let context: DockContext
     let selected: Bool
@@ -128,38 +131,40 @@ private struct ModeButton: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 6) {
-                ContextSymbol(name: context.symbol, size: 12.5)
-                if selected {
-                    Text(context.name)
-                        .font(.system(size: 13, weight: .semibold))
-                        .fixedSize()
-                        .transition(.asymmetric(insertion: .opacity.animation(.easeOut(duration: 0.14).delay(0.18)),
-                                                removal: .quickExit))
+            ContextSymbol(name: context.symbol, size: 12.5)
+                .foregroundStyle(selected ? .white : .white.opacity(hover ? 0.9 : 0.55))
+                .frame(width: selected ? DockMetrics.pill : DockMetrics.control, height: DockMetrics.control)
+                .background {
+                    if selected {
+                        Capsule().fill(context.tint)
+                            .matchedGeometryEffect(id: "pill", in: namespace)
+                            // Arrive solid and slide; the old pill just drops out (no orange/purple cross-fade).
+                            .transition(.asymmetric(insertion: .identity, removal: .quickExit))
+                    } else {
+                        Circle().fill(.white.opacity(hover ? 0.16 : 0.07))
+                    }
                 }
-            }
-            .foregroundStyle(selected ? .white : .white.opacity(hover ? 0.9 : 0.55))
-            .padding(.horizontal, selected ? 12 : 0)
-            .frame(minWidth: DockMetrics.control, minHeight: DockMetrics.control)
-            .background {
-                if selected {
-                    Capsule().fill(context.tint)
-                        .matchedGeometryEffect(id: "pill", in: namespace)
-                        // Arrive solid and slide; the old pill just drops out (no orange/purple cross-fade).
-                        .transition(.asymmetric(insertion: .identity, removal: .quickExit))
-                } else {
-                    Circle().fill(.white.opacity(hover ? 0.16 : 0.07))
-                }
-            }
-            .contentShape(Capsule())
-            .scaleEffect(pressed ? 0.94 : 1)
+                .contentShape(Capsule())
+                .scaleEffect(pressed ? 0.94 : 1)
         }
         .buttonStyle(.plain)
+        .overlay(alignment: .top) {
+            if hover {
+                Text("\(context.name)  ⌃⌥\(context.key)")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 10).padding(.vertical, 4)
+                    .background(Frosted(cornerRadius: 12))
+                    .fixedSize()
+                    .offset(y: -39)
+                    .transition(.opacity.combined(with: .offset(y: 4)))
+                    .allowsHitTesting(false)
+            }
+        }
         .onHover { h in withAnimation(.easeOut(duration: 0.12)) { mouseOver = h } }
         .simultaneousGesture(DragGesture(minimumDistance: 0)
             .onChanged { _ in withAnimation(.easeOut(duration: 0.08)) { pressed = true } }
             .onEnded { _ in withAnimation(.spring(response: 0.25)) { pressed = false } })
-        .help("\(context.name)  ⌃⌥\(context.key)")
     }
 }
 

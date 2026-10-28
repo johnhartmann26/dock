@@ -318,3 +318,5 @@ John confirmed the 0.15s slide feels right.
 - Every swipe that doesn't switch is now logged with why (at the end, same gesture as a Dock swipe, macOS still owns three-finger swipes), and the log keeps 60 lines instead of 20.
 
 John confirmed: swiping feels fast and every swipe switched.
+
+**No name in the context pill (John: "too much space").** The selected context's pill used to hold its name, so it was about 80–100pt wide, and the Dock changed width on every switch as the name changed. Now the pill is a fixed 42pt icon-only capsule. Hovering any context button shows its name and shortcut above it ("Work ⌃⌥2"), in the same frosted label as app names, and the plain-tooltip `.help` is gone. Checked in the gallery: all three contexts, the hover label, and a Work Dock about 70pt narrower.
