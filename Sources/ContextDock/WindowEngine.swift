@@ -35,6 +35,8 @@ final class WindowEngine {
     private(set) var current: String
     var config: DockConfig { didSet { applyVisibility(); changed() } }
     var onChange: () -> Void = {}
+    /// A window you asked for in a context (Dock click, New Window Here, a launch) showed up.
+    var onAskedWindow: (_ bundleID: String, _ context: String) -> Void = { _, _ in }
 
     private var observers: [pid_t: AXObserver] = [:]
     private var saved: [CGWindowID: SavedWindow] = [:]
@@ -258,13 +260,6 @@ final class WindowEngine {
                 note("showed \(app.localizedName ?? bundleID): AX can see its windows again")
             }
         }
-    }
-
-    /// Focus this context's own top window again, after something else (a browser's profile
-    /// switch) grabbed the front. Focus changes in the next moment don't count as you moving.
-    func refocus() {
-        ignoreFocusUntil = Date().addingTimeInterval(0.45)
-        focusCurrent(preferring: nil)
     }
 
     private func focusCurrent(preferring preferred: CGWindowID?) {
@@ -733,6 +728,7 @@ final class WindowEngine {
             awaitingWindow = nil
             ignoreFocusUntil = Date().addingTimeInterval(0.3)
             focus(id)
+            onAskedWindow(bundleID, context)
         }
         persist()
         changed()

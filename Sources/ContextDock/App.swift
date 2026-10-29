@@ -32,8 +32,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let profiles = BrowserProfiles()
     private let wallpapers = Wallpapers()
     private var appearanceObservation: NSKeyValueObservation?
-    /// The context whose browser profiles were last applied.
-    private var profilesShown: String?
+    /// The context whose wallpaper was last applied.
+    private var contextShown: String?
     private var lastStep: (reason: String, at: Date)?
     /// The context a slide is on its way to, until its windows have moved.
     private var heading: String?
@@ -99,21 +99,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             }
         }
-        profiles.onStoleFocus = { [weak self] in self?.engine.refocus() }
-        if profilesShown != engine.current {
-            profilesShown = engine.current
-            profiles.apply(engine.config.profiles, context: engine.current)
-        }
-        // A browser that just opened shows this context's profile once its window is up.
-        NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didLaunchApplicationNotification, object: nil, queue: .main) { [weak self] n in
-            let app = n.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
-            MainActor.assumeIsolated {
-                guard let self, let id = app?.bundleIdentifier, self.engine.config.profiles?[id] != nil else { return }
-                for delay in [1.5, 4.0] {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
-                        self.profiles.apply(self.engine.config.profiles?.filter { $0.key == id }, context: self.engine.current)
-                    }
-                }
+        // A browser window you open in a context shows that context's profile. A moment after it's
+        // adopted, so it's the browser's front window.
+        engine.onAskedWindow = { [weak self] bundleID, context in
+            guard let self, let profile = self.engine.config.profiles?[bundleID]?[context] else { return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                self.profiles.applyToNewWindow(of: bundleID, profile: profile)
             }
         }
         threeFinger.onSwipe = { [weak self] dir in self?.step(fingers: dir, reason: "3-finger swipe") }
@@ -256,18 +247,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - UI sync
 
     private func syncUI() {
-        if profilesShown != engine.current {
-            profilesShown = engine.current
-            // During a slide, the overlay covers the browser coming to the front to switch profile,
-            // and Dia's own profile animation after it (about a third of a second).
-            // The desktop picture changes under the slide too; give it a moment to draw.
+        if contextShown != engine.current {
+            contextShown = engine.current
+            // The desktop picture changes under the slide; give it a moment to draw.
             if wallpapers.apply(engine.config.wallpapers?[engine.current], context: engine.current) {
                 let release = slide.hold()
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.12, execute: release)
-            }
-            let release = slide.hold()
-            profiles.apply(engine.config.profiles, context: engine.current) { changed in
-                if changed { DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: release) } else { release() }
             }
         }
         state.show(engine.current)
