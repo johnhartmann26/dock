@@ -22,9 +22,6 @@ struct DockConfig: Codable {
     var homes: [String: String]?
     /// The slide on switches you make (on unless set to false).
     var switchAnimation: Bool?
-    /// Browsers whose windows hold a profile, by bundle id, then context id → profile name. A window
-    /// you open in a context starts in its profile (Dia: Personal's window shows Solo, Work's Work).
-    var profiles: [String: [String: String]]?
     /// Desktop picture per context id, with a light-mode and a dark-mode picture (file paths; either
     /// one alone is used in both modes). Contexts without one leave the desktop picture alone.
     var wallpapers: [String: Wallpaper]?
@@ -45,8 +42,7 @@ struct DockConfig: Codable {
                         key: "3"),
         ],
         shared: ["com.apple.Music", "com.1password.1password", "com.apple.finder"],
-        homes: [:],
-        profiles: ["company.thebrowser.dia": ["personal": "Solo", "work": "Work", "agents": "Work"]]
+        homes: [:]
     )
 
     static var url: URL {

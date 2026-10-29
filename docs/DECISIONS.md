@@ -398,3 +398,7 @@ The one shared Dia window that switched profile on every switch caused a string 
 ## Links into per-context Dia windows: tried and dropped
 
 Tested with example.com links opened from each context: Dia sends links from other apps to one profile (Solo) and switches whichever Dia window it picks to that profile, so a link from Work or Agents landed in another context's window (or flipped Work's window to Solo), and ContextDock followed it. Tried moving the link instead: reopen it in this context's window with Dia's AppleScript (`make new tab`, `close`, `move … to profile`), and put the landing window back in its profile. It was unreliable (matching windows by title, "Access not allowed" and stale tab ids on 2 of 3 runs), and John chose to copy and paste links into the right window instead. Nothing was kept; links behave as before (ContextDock follows a link to the window it lands in).
+
+## ContextDock never touches browser profiles
+
+John still saw Dia's profile change sometimes and asked that ContextDock never do it. The one remaining case was setting a new window's profile: about 0.3s after a Dia window you opened was adopted, ContextDock ran `focus (profile …)` on Dia's *front* window, which could be another context's window if you switched in that moment. Removed entirely: Profiles.swift, the `profiles` config key, the Apple Events entitlement and usage text. Each Dia window keeps whatever profile you give it. If a profile still changes on its own, it's Dia (links go to one profile; Dia's own sidebar swipe switches profiles).

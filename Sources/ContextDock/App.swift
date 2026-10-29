@@ -29,7 +29,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var swipeDistance: CGFloat = 0
     private var swipeUsed = false
     private let threeFinger = ThreeFingerSwipe()
-    private let profiles = BrowserProfiles()
     private let wallpapers = Wallpapers()
     private var appearanceObservation: NSKeyValueObservation?
     /// The context whose wallpaper was last applied.
@@ -87,7 +86,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func begin() {
         engine.start()
         threeFinger.log = { [weak self] in self?.engine.note($0) }
-        profiles.log = { [weak self] in self?.engine.note($0) }
         wallpapers.log = { [weak self] in self?.engine.note($0) }
         wallpapers.apply(engine.config.wallpapers?[engine.current], context: engine.current)
         // Light ↔ dark: show this context's other picture.
@@ -97,14 +95,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     guard let self else { return }
                     self.wallpapers.apply(self.engine.config.wallpapers?[self.engine.current], context: self.engine.current)
                 }
-            }
-        }
-        // A browser window you open in a context shows that context's profile. A moment after it's
-        // adopted, so it's the browser's front window.
-        engine.onAskedWindow = { [weak self] bundleID, context in
-            guard let self, let profile = self.engine.config.profiles?[bundleID]?[context] else { return }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                self.profiles.applyToNewWindow(of: bundleID, profile: profile)
             }
         }
         threeFinger.onSwipe = { [weak self] dir in self?.step(fingers: dir, reason: "3-finger swipe") }
