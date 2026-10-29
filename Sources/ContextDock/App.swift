@@ -29,6 +29,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var swipeDistance: CGFloat = 0
     private var swipeUsed = false
     private let threeFinger = ThreeFingerSwipe()
+    private let rightCommand = RightCommandKeys()
     private let wallpapers = Wallpapers()
     private var appearanceObservation: NSKeyValueObservation?
     /// The context whose wallpaper was last applied.
@@ -51,6 +52,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         state.onSelect = { [weak self] id in self?.userSwitch(to: id, reason: "dock") }
         state.onOpenApp = { [weak self] id in self?.engine.openApp(id) }
         state.onMenuForApp = { [weak self] id in self?.windowMenu(for: id) }
+        state.onSetPinned = { [weak self] apps in self?.setPinned(apps) }
         engine.onChange = { [weak self] in self?.syncUI() }
 
         panel = DockPanel(state: state)
@@ -100,6 +102,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         threeFinger.onSwipe = { [weak self] dir in self?.step(fingers: dir, reason: "3-finger swipe") }
         threeFinger.begin()
         slide.prepare()
+        // Right ⌘ + ←/→ steps, Right ⌘ + a context's key jumps (left ⌘ stays for text).
+        var jumps: [Int64: String] = [:]
+        for ctx in engine.config.contexts { if let code = HotKeys.keyCode(for: ctx.key) { jumps[Int64(code)] = ctx.id } }
+        rightCommand.jumpKeys = Set(jumps.keys)
+        rightCommand.log = { [weak self] in self?.engine.note($0) }
+        rightCommand.onStep = { [weak self] dir in self?.step(fingers: dir, reason: "right ⌘ arrow") }
+        rightCommand.onJump = { [weak self] code in
+            if let id = jumps[code] { self?.userSwitch(to: id, reason: "right ⌘ key") }
+        }
+        rightCommand.begin()
         for ctx in engine.config.contexts {
             guard let code = HotKeys.keyCode(for: ctx.key) else { continue }
             let id = ctx.id
@@ -245,8 +257,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.12, execute: release)
             }
         }
-        state.show(engine.current)
         let ctx = engine.current
+        let pinned = Set(state.config.contexts.first { $0.id == ctx }?.apps ?? [])
+        state.show(ctx, open: engine.appsWithWindows(in: ctx).filter { !pinned.contains($0) })
         state.running = Set(state.config.contexts.first { $0.id == ctx }?.apps.filter { engine.hasWindows($0, in: ctx) } ?? [])
         updateStatusItem()
     }
@@ -329,7 +342,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let item = menu.addItem(withTitle: "New Window Here", action: #selector(openApp(_:)), keyEquivalent: "")
         item.representedObject = bundleID
         item.target = self
+        let pinned = engine.config.contexts.first { $0.id == engine.current }?.apps.contains(bundleID) == true
+        let name = state.currentContext?.name ?? engine.current
+        let keep = menu.addItem(withTitle: pinned ? "Remove from \(name) Dock" : "Keep in \(name) Dock",
+                                action: #selector(togglePinned(_:)), keyEquivalent: "")
+        keep.representedObject = bundleID
+        keep.target = self
         return menu
+    }
+
+    @objc private func togglePinned(_ sender: NSMenuItem) {
+        let id = sender.representedObject as! String
+        var apps = engine.config.contexts.first { $0.id == engine.current }?.apps ?? []
+        if let i = apps.firstIndex(of: id) { apps.remove(at: i) } else { apps.append(id) }
+        setPinned(apps)
+    }
+
+    /// The current context's Dock contents, from a drag or the right-click menu. Saved to config.json.
+    private func setPinned(_ apps: [String]) {
+        var config = engine.config
+        guard let i = config.contexts.firstIndex(where: { $0.id == engine.current }) else { return }
+        config.contexts[i].apps = apps
+        config.save()
+        withAnimation(DockMotion.switch) {
+            state.config = config
+            state.reloadApps()
+        }
+        engine.config = config
+        engine.note("dock: \(engine.current) is now \(apps.joined(separator: ", "))")
     }
 
     @objc private func switchFromMenu(_ sender: NSMenuItem) { userSwitch(to: sender.representedObject as! String, reason: "menu") }

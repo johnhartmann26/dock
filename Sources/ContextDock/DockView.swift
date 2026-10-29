@@ -8,10 +8,71 @@ final class DockState: ObservableObject {
     @Published var running: Set<String> = []
     /// Apps shown for `current`.
     @Published var shownApps: [DockApp] = []
+    /// Apps with windows open in `current` that aren't in its Dock, shown after a divider like the
+    /// macOS Dock's recent apps.
+    @Published var openApps: [DockApp] = []
+    private var tiles: [String: DockApp] = [:]
 
     var onSelect: (String) -> Void = { _ in }
     var onOpenApp: (String) -> Void = { _ in }
     var onMenuForApp: (String) -> NSMenu? = { _ in nil }
+    var onSetPinned: ([String]) -> Void = { _ in }
+
+    /// An icon being dragged: from the pinned apps (reorder, or drag out to remove) or from the
+    /// open apps (drop among the pinned ones to keep it).
+    struct Drag: Equatable {
+        var bundleID: String
+        var fromPinned: Bool
+        var index: Int
+        var start: CGPoint
+        var translation: CGSize
+        var location: CGPoint { CGPoint(x: start.x + translation.width, y: start.y + translation.height) }
+    }
+    @Published var drag: Drag?
+    /// Where the pinned icons sit, in the bar's coordinates.
+    var pinnedFrame: CGRect = .zero
+    static let step = DockMetrics.icon + 7
+    /// Dragged this far up, a pinned icon is removed on release.
+    static let removeLift: CGFloat = 36
+
+    var removing: Bool { drag.map { $0.fromPinned && $0.translation.height < -Self.removeLift } ?? false }
+
+    /// Where the dragged icon would land among the pinned ones (an index into the pinned list
+    /// without it), or nil when it's outside them or being removed.
+    var dropIndex: Int? {
+        guard let d = drag, !removing else { return nil }
+        let x = d.location.x
+        guard x > pinnedFrame.minX - Self.step / 2, x < pinnedFrame.maxX + Self.step / 2 else { return nil }
+        let count = shownApps.count - (d.fromPinned ? 1 : 0)
+        return min(max(Int(((x - pinnedFrame.minX) / Self.step).rounded(.down)), 0), count)
+    }
+
+    /// How far a pinned icon moves aside to make room for the dragged one.
+    func shift(ofPinned k: Int) -> CGFloat {
+        guard let d = drag else { return 0 }
+        if d.fromPinned {
+            if k == d.index { return 0 }
+            let p = k < d.index ? k : k - 1          // its place without the dragged icon
+            let shown = dropIndex.map { p >= $0 ? p + 1 : p } ?? p
+            return CGFloat(shown - k) * Self.step
+        }
+        guard let j = dropIndex else { return 0 }
+        return k >= j ? Self.step : 0
+    }
+
+    func endDrag() {
+        guard let d = drag else { return }
+        var apps = shownApps.map(\.bundleID)
+        let target = dropIndex
+        if d.fromPinned {
+            apps.remove(at: d.index)
+            if let j = target { apps.insert(d.bundleID, at: j) }
+        } else if let j = target {
+            apps.insert(d.bundleID, at: j)
+        }
+        withAnimation(DockMotion.switch) { drag = nil }
+        if apps != shownApps.map(\.bundleID) { onSetPinned(apps) }
+    }
 
     init(config: DockConfig, current: String) {
         self.config = config
@@ -28,12 +89,25 @@ final class DockState: ObservableObject {
     /// Called by the engine after a switch, from whatever source (Dock, hotkey, focus).
     /// The bar stays open: icons cross-fade in place and the bar glides to its new width.
     /// Apps that are in both contexts (Dia in Work and Personal) keep their tile.
-    func show(_ id: String) {
-        guard id != current else { return }
+    func show(_ id: String, open: [String]) {
+        let tiles = open.compactMap(tile)
+        guard id != current else {
+            if tiles.map(\.id) != openApps.map(\.id) { withAnimation(DockMotion.switch) { openApps = tiles } }
+            return
+        }
         withAnimation(DockMotion.switch) {
             current = id
             shownApps = Self.apps(for: id, in: config)
+            openApps = tiles
         }
+    }
+
+    /// Icons are looked up once per app.
+    private func tile(_ bundleID: String) -> DockApp? {
+        if let t = tiles[bundleID] { return t }
+        let t = DockApp(bundleID: bundleID)
+        tiles[bundleID] = t
+        return t
     }
 
     func reloadApps() {
@@ -98,11 +172,35 @@ struct DockView: View {
                     AppTile(app: app, running: state.running.contains(app.bundleID),
                             open: { state.onOpenApp(app.bundleID) },
                             menu: { state.onMenuForApp(app.bundleID) })
+                        .draggableTile(state: state, bundleID: app.bundleID, pinned: true, index: index)
+                        .offset(x: state.shift(ofPinned: index))
                         .transition(.asymmetric(insertion: .tileIn(index), removal: .tileOut))
                 }
             }
             .frame(minWidth: DockMetrics.icon, alignment: .leading)
+            .background(GeometryReader { g in
+                Color.clear.onAppear { state.pinnedFrame = g.frame(in: .named("bar")) }
+                    .onChange(of: g.frame(in: .named("bar"))) { _, f in state.pinnedFrame = f }
+            })
+            .animation(.easeOut(duration: 0.16), value: state.drag)
+            if !state.openApps.isEmpty {
+                Rectangle()
+                    .fill(.primary.opacity(0.16))
+                    .frame(width: 1, height: 30)
+                    .padding(.horizontal, 11)
+                    .transition(.opacity)
+                HStack(spacing: 7) {
+                    ForEach(Array(state.openApps.enumerated()), id: \.element.id) { index, app in
+                        AppTile(app: app, running: true,
+                                open: { state.onOpenApp(app.bundleID) },
+                                menu: { state.onMenuForApp(app.bundleID) })
+                            .draggableTile(state: state, bundleID: app.bundleID, pinned: false, index: index)
+                            .transition(.asymmetric(insertion: .tileIn(index), removal: .tileOut))
+                    }
+                }
+            }
         }
+        .coordinateSpace(name: "bar")
         .padding(.leading, 9)
         .padding(.trailing, 10)
         .padding(.vertical, DockMetrics.padV)
@@ -113,6 +211,42 @@ struct DockView: View {
         )
         .shadow(color: .black.opacity(0.2), radius: 18, y: 8)
         .animation(DockMotion.switch, value: state.current)
+    }
+}
+
+extension View {
+    /// Drag an icon: sideways to reorder or move between the open and pinned apps, up and out of
+    /// the bar to remove a pinned one. A click is still a click (it takes 5pt of movement to drag).
+    func draggableTile(state: DockState, bundleID: String, pinned: Bool, index: Int) -> some View {
+        let dragging = state.drag?.bundleID == bundleID
+        return self
+            .offset(dragging ? state.drag!.translation : .zero)
+            .scaleEffect(dragging ? 1.1 : 1, anchor: .bottom)
+            .opacity(dragging && state.removing ? 0.35 : 1)
+            .overlay(alignment: .top) {
+                if dragging && state.removing {
+                    Text("Remove")
+                        .font(.system(size: 11, weight: .semibold))
+                        .padding(.horizontal, 8).padding(.vertical, 3)
+                        .background(Frosted(cornerRadius: 10))
+                        .fixedSize()
+                        .offset(y: state.drag!.translation.height - 26)
+                        .allowsHitTesting(false)
+                }
+            }
+            .zIndex(dragging ? 2 : 0)
+            .gesture(
+                DragGesture(minimumDistance: 5, coordinateSpace: .named("bar"))
+                    .onChanged { v in
+                        if state.drag?.bundleID != bundleID {
+                            state.drag = .init(bundleID: bundleID, fromPinned: pinned, index: index,
+                                               start: v.startLocation, translation: v.translation)
+                        } else {
+                            state.drag?.translation = v.translation
+                        }
+                    }
+                    .onEnded { _ in state.endDrag() }
+            )
     }
 }
 

@@ -418,6 +418,23 @@ final class WindowEngine {
 
     func isShared(_ bundleID: String) -> Bool { config.shared.contains(bundleID) }
 
+    /// Apps with a window open in this context (shared apps included, windows the app closed but
+    /// kept left out), in the order their first window here appeared. Apps AX can't see into
+    /// (Zoom in a meeting) count by the context they live in.
+    func appsWithWindows(in context: String) -> [String] {
+        let showing = Self.onScreenIDs()
+        var seen = Set<String>()
+        var apps = windows.values
+            .filter { ($0.context == context || isShared($0.bundleID)) && !demoHidden($0.id) && !closedByApp($0, showing: showing) }
+            .sorted { $0.id < $1.id }
+            .map(\.bundleID)
+            .filter { seen.insert($0).inserted }
+        for (pid, ctx) in opaqueApps where ctx == context {
+            if let id = NSRunningApplication(processIdentifier: pid)?.bundleIdentifier, seen.insert(id).inserted { apps.append(id) }
+        }
+        return apps
+    }
+
     /// A window from another context that was fullscreen: once it has left fullscreen, follow it if
     /// it's the one in front (you exited fullscreen to keep using it), otherwise park it as usual.
     private func checkLeftFullScreen(_ id: CGWindowID) {

@@ -73,7 +73,7 @@ final class GalleryDelegate: NSObject, NSApplicationDelegate {
         timer = Timer.scheduledTimer(withTimeInterval: 1.6, repeats: true) { _ in
             MainActor.assumeIsolated {
                 i = (i + 1) % ids.count
-                live.show(ids[i])
+                live.show(ids[i], open: [])
             }
         }
         if let n = CommandLine.arguments.firstIndex(of: "--window-id-file"), n + 1 < CommandLine.arguments.count {

@@ -84,10 +84,18 @@ struct DockApp: Identifiable, Hashable {
     var id: String { bundleID }
 
     init?(bundleID: String) {
-        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else { return nil }
-        self.bundleID = bundleID
-        self.name = FileManager.default.displayName(atPath: url.path).replacingOccurrences(of: ".app", with: "")
-        self.icon = NSWorkspace.shared.icon(forFile: url.path)
+        if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) {
+            self.bundleID = bundleID
+            self.name = FileManager.default.displayName(atPath: url.path).replacingOccurrences(of: ".app", with: "")
+            self.icon = NSWorkspace.shared.icon(forFile: url.path)
+        } else if let app = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).first, let icon = app.icon {
+            // Running but not where Launch Services looks (a game started by Steam).
+            self.bundleID = bundleID
+            self.name = app.localizedName ?? bundleID
+            self.icon = icon
+        } else {
+            return nil
+        }
     }
 }
 

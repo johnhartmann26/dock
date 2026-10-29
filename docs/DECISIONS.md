@@ -402,3 +402,11 @@ Tested with example.com links opened from each context: Dia sends links from oth
 ## ContextDock never touches browser profiles
 
 John still saw Dia's profile change sometimes and asked that ContextDock never do it. The one remaining case was setting a new window's profile: about 0.3s after a Dia window you opened was adopted, ContextDock ran `focus (profile …)` on Dia's *front* window, which could be another context's window if you switched in that moment. Removed entirely: Profiles.swift, the `profiles` config key, the Apple Events entitlement and usage text. Each Dia window keeps whatever profile you give it. If a profile still changes on its own, it's Dia (links go to one profile; Dia's own sidebar swipe switches profiles).
+
+## Open apps in the Dock, and editing the Dock
+
+Like the macOS Dock's recent apps, apps with a window open in this context that aren't in its Dock now show after a second divider, with a running dot (shared apps with windows count; windows an app closed but kept don't; apps AX can't see into count by the context they live in). Order is the order their first window appeared. The Dock is editable in place: right-click > Keep in / Remove from <context> Dock, or drag: sideways to reorder (the other icons move aside), from the open apps into the pinned ones to keep it, up 36pt out of the bar to remove it (it fades with a "Remove" label). Changes save to config.json, and since implicit homes come from Dock contents, pinning an app in one context makes that its home. Dragging was not tested here (it needs the real mouse while John was using the Mac).
+
+## Right ⌘ shortcuts
+
+John found ⌃⌥ too hard to hit and never wants to press Control. Plain ⌘←/→ is start/end of line in every text field, so only the right-hand Command key switches: Right ⌘←/→ steps, Right ⌘1/2/3 jumps. Carbon hotkeys can't tell the Command keys apart, so it's a keyboard event tap that checks the device-dependent right-Command bit, swallows just those presses (and their key-ups, ignoring auto-repeat), and passes everything else through. Tested with synthesized keys: right ⌘2/⌘3 jumped, right ⌘→ stepped, left ⌘←/→ didn't switch. The ⌃⌥ hotkeys still work.
