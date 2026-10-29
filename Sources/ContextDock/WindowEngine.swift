@@ -35,6 +35,19 @@ final class WindowEngine {
     private(set) var current: String
     var config: DockConfig { didSet { applyVisibility(); changed() } }
     var onChange: () -> Void = {}
+    /// Something that may have closed or hidden a window without destroying it (many apps keep a
+    /// closed window, just hidden): the Dock rechecks which apps have windows here.
+    var onWindowsMaybeChanged: () -> Void = {}
+    private var windowsCheckPending = false
+
+    private func windowsMaybeChanged() {
+        guard !windowsCheckPending else { return }
+        windowsCheckPending = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
+            self?.windowsCheckPending = false
+            self?.onWindowsMaybeChanged()
+        }
+    }
 
     private var observers: [pid_t: AXObserver] = [:]
     private var saved: [CGWindowID: SavedWindow] = [:]
@@ -101,6 +114,12 @@ final class WindowEngine {
         nc.addObserver(forName: NSWorkspace.didTerminateApplicationNotification, object: nil, queue: .main) { [weak self] n in
             guard let app = n.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication else { return }
             MainActor.assumeIsolated { self?.appTerminated(app.processIdentifier) }
+        }
+        for name in [NSWorkspace.didDeactivateApplicationNotification, NSWorkspace.didHideApplicationNotification,
+                     NSWorkspace.didUnhideApplicationNotification] {
+            nc.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.windowsMaybeChanged() }
+            }
         }
         nc.addObserver(forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main) { [weak self] n in
             guard let app = n.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication else { return }
@@ -654,6 +673,8 @@ final class WindowEngine {
     private func appTerminated(_ pid: pid_t) {
         windows = windows.filter { $0.value.pid != pid }
         observers[pid] = nil
+        opaqueApps[pid] = nil
+        hiddenApps.remove(pid)
         persist()
         changed()
     }
@@ -923,6 +944,7 @@ final class WindowEngine {
             adopt(element, pid: pid, isNew: true)
         case kAXUIElementDestroyedNotification:
             prune(pid)
+            windowsMaybeChanged()
         case kAXTitleChangedNotification:
             titleChanged(element, pid: pid)
         case kAXMovedNotification:
@@ -931,6 +953,7 @@ final class WindowEngine {
         case kAXResizedNotification:
             scheduleDockCheck(element)
         default:
+            windowsMaybeChanged()
             // Decide a moment later, once any Space change behind this focus change has been announced.
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
                 guard NSWorkspace.shared.frontmostApplication?.processIdentifier == pid else { return }

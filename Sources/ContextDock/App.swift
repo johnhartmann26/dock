@@ -54,6 +54,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         state.onMenuForApp = { [weak self] id in self?.windowMenu(for: id) }
         state.onSetPinned = { [weak self] apps in self?.setPinned(apps) }
         engine.onChange = { [weak self] in self?.syncUI() }
+        engine.onWindowsMaybeChanged = { [weak self] in self?.syncApps() }
 
         panel = DockPanel(state: state)
         panel.orderFrontRegardless()
@@ -257,11 +258,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.12, execute: release)
             }
         }
-        let ctx = engine.current
-        let pinned = Set(state.config.contexts.first { $0.id == ctx }?.apps ?? [])
-        state.show(ctx, open: engine.appsWithWindows(in: ctx).filter { !pinned.contains($0) })
-        state.running = Set(state.config.contexts.first { $0.id == ctx }?.apps.filter { engine.hasWindows($0, in: ctx) } ?? [])
+        syncApps()
         updateStatusItem()
+    }
+
+    /// The Dock's open apps and running dots for the current context.
+    private func syncApps() {
+        let ctx = engine.current
+        let pinned = state.config.contexts.first { $0.id == ctx }?.apps ?? []
+        let open = engine.appsWithWindows(in: ctx)
+        let extra = open.filter { !pinned.contains($0) }
+        if extra != state.openApps.map(\.bundleID) { engine.note("dock: open apps in \(ctx): \(extra.isEmpty ? "none" : extra.joined(separator: ", "))") }
+        state.show(ctx, open: extra)
+        let running = Set(pinned.filter { open.contains($0) })
+        if running != state.running { state.running = running }
     }
 
     private func updateStatusItem() {
