@@ -17,6 +17,7 @@ final class DockState: ObservableObject {
     var onOpenApp: (String) -> Void = { _ in }
     var onMenuForApp: (String) -> NSMenu? = { _ in nil }
     var onSetPinned: ([String]) -> Void = { _ in }
+    var onSetOrder: ([String]) -> Void = { _ in }
 
     /// An icon being dragged: from the pinned apps (reorder, or drag out to remove) or from the
     /// open apps (drop among the pinned ones to keep it).
@@ -74,6 +75,60 @@ final class DockState: ObservableObject {
         if apps != shownApps.map(\.bundleID) { onSetPinned(apps) }
     }
 
+    /// A context button being dragged sideways to reorder the contexts.
+    struct ContextDrag: Equatable {
+        var id: String
+        var index: Int
+        var translation: CGFloat
+    }
+    @Published var contextDrag: ContextDrag?
+    var contextDragEnded = Date.distantPast
+
+    /// Context buttons differ in width (the selected one is a pill), so a button's place is worked
+    /// out from the real widths: the dragged one lands after every button whose middle it has passed.
+    private func contextCenters() -> [CGFloat] {
+        var x: CGFloat = 0
+        return config.contexts.map { ctx in
+            let w = ctx.id == current ? DockMetrics.pill : DockMetrics.control
+            defer { x += w + DockMetrics.contextSpacing }
+            return x + w / 2
+        }
+    }
+
+    private func contextWidth(_ id: String) -> CGFloat { id == current ? DockMetrics.pill : DockMetrics.control }
+
+    /// The context order if the dragged button were dropped now.
+    private var contextDropOrder: [String] {
+        let ids = config.contexts.map(\.id)
+        guard let d = contextDrag else { return ids }
+        let centers = contextCenters()
+        let c = centers[d.index] + d.translation
+        var others = ids
+        others.remove(at: d.index)
+        let j = centers.enumerated().filter { $0.offset != d.index && $0.element < c }.count
+        others.insert(d.id, at: j)
+        return others
+    }
+
+    /// How far a context button moves aside to make room for the dragged one.
+    func shift(ofContext k: Int) -> CGFloat {
+        guard let d = contextDrag, k != d.index else { return 0 }
+        let centers = contextCenters()
+        let c = centers[d.index] + d.translation
+        let room = contextWidth(d.id) + DockMetrics.contextSpacing
+        if k > d.index && centers[k] < c { return -room }
+        if k < d.index && centers[k] > c { return room }
+        return 0
+    }
+
+    func endContextDrag() {
+        guard contextDrag != nil else { return }
+        let order = contextDropOrder
+        contextDragEnded = Date()
+        withAnimation(DockMotion.switch) { contextDrag = nil }
+        if order != config.contexts.map(\.id) { onSetOrder(order) }
+    }
+
     init(config: DockConfig, current: String) {
         self.config = config
         self.current = current
@@ -129,6 +184,7 @@ enum DockMetrics {
     static let control: CGFloat = 30
     /// Width of the selected context's pill.
     static let pill: CGFloat = 42
+    static let contextSpacing: CGFloat = 4
     static let corner: CGFloat = 21
     static let bottomGap: CGFloat = 8
     static let padV: CGFloat = 7
@@ -154,15 +210,34 @@ struct DockView: View {
 
     private var bar: some View {
         HStack(spacing: 0) {
-            HStack(spacing: 4) {
-                ForEach(state.config.contexts) { ctx in
-                    ModeButton(context: ctx, selected: ctx.id == state.current, namespace: pill) {
-                        state.onSelect(ctx.id)
+            HStack(spacing: DockMetrics.contextSpacing) {
+                ForEach(Array(state.config.contexts.enumerated()), id: \.element.id) { index, ctx in
+                    let dragging = state.contextDrag?.id == ctx.id
+                    ModeButton(context: ctx, selected: ctx.id == state.current, namespace: pill,
+                               dragging: state.contextDrag != nil) {
+                        // Letting go of a drag can also count as a tap.
+                        if Date().timeIntervalSince(state.contextDragEnded) > 0.3 { state.onSelect(ctx.id) }
                     }
+                    .offset(x: dragging ? state.contextDrag!.translation : state.shift(ofContext: index))
+                    .scaleEffect(dragging ? 1.1 : 1)
                     // The sliding pill belongs to the selected button; keep it above the buttons it passes.
-                    .zIndex(ctx.id == state.current ? 1 : 0)
+                    .zIndex(dragging ? 3 : ctx.id == state.current ? 1 : 0)
+                    // Drag sideways to reorder; a click is still a click (it takes 5pt of movement to drag).
+                    // Simultaneous, because the button's own press gesture would otherwise win.
+                    .simultaneousGesture(
+                        DragGesture(minimumDistance: 5)
+                            .onChanged { v in
+                                if state.contextDrag?.id != ctx.id {
+                                    state.contextDrag = .init(id: ctx.id, index: index, translation: v.translation.width)
+                                } else {
+                                    state.contextDrag?.translation = v.translation.width
+                                }
+                            }
+                            .onEnded { _ in state.endContextDrag() }
+                    )
                 }
             }
+            .animation(.easeOut(duration: 0.16), value: state.contextDrag)
             Rectangle()
                 .fill(.primary.opacity(0.16))
                 .frame(width: 1, height: 30)
@@ -256,14 +331,17 @@ private struct ModeButton: View {
     let context: DockContext
     let selected: Bool
     let namespace: Namespace.ID
+    /// Any context button is being dragged: no hover labels meanwhile.
+    var dragging = false
     let action: () -> Void
     @State private var mouseOver = false
     @State private var pressed = false
     @Environment(\.forcedHover) private var forced
-    private var hover: Bool { mouseOver || forced == context.id }
+    private var hover: Bool { (mouseOver && !dragging) || forced == context.id }
 
     var body: some View {
-        Button(action: action) {
+        // A tap rather than a Button, so dragging the button to reorder isn't also a click.
+        Group {
             ContextSymbol(name: context.symbol, size: 12.5)
                 .foregroundStyle(selected ? AnyShapeStyle(.white) : AnyShapeStyle(.primary.opacity(hover ? 0.9 : 0.55)))
                 .frame(width: selected ? DockMetrics.pill : DockMetrics.control, height: DockMetrics.control)
@@ -280,10 +358,11 @@ private struct ModeButton: View {
                 .contentShape(Capsule())
                 .scaleEffect(pressed ? 0.94 : 1)
         }
-        .buttonStyle(.plain)
+        .onTapGesture(perform: action)
+        .accessibilityAddTraits(.isButton)
         .overlay(alignment: .top) {
             if hover {
-                Text("\(context.name)  ⌃⌥\(context.key)")
+                Text("\(context.name)  right ⌘\(context.key)")
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(.primary)
                     .padding(.horizontal, 10).padding(.vertical, 4)

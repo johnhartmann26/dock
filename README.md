@@ -25,6 +25,7 @@ On first launch, approve **ContextDock** in System Settings > Privacy & Security
 | Click an app in the Dock | Bring up its most recent window in this context |
 | ⌃⌥⇧1 / 2 / 3, or the menu bar > Move Front Window To | Send the front window to another context |
 | Right-click an app in the Dock | List its windows here, move one, open a new window here, or keep it in / remove it from this context's Dock |
+| Drag a context in the Dock | Sideways to reorder the contexts; swipes and arrows follow the new order, and ⌘1 / 2 / 3 are renumbered so 1 is the leftmost |
 | Drag an app in the Dock | Sideways to reorder; from the open apps (after the second divider) into the pinned ones to keep it; up out of the bar to remove it |
 | Menu bar > Show All Windows (Recover) | Put every parked window back on screen |
 | Menu bar > Open at Login | Start ContextDock when you log in (also in System Settings > General > Login Items) |

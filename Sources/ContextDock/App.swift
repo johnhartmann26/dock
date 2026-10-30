@@ -53,6 +53,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         state.onOpenApp = { [weak self] id in self?.engine.openApp(id) }
         state.onMenuForApp = { [weak self] id in self?.windowMenu(for: id) }
         state.onSetPinned = { [weak self] apps in self?.setPinned(apps) }
+        state.onSetOrder = { [weak self] ids in self?.setOrder(ids) }
         engine.onChange = { [weak self] in self?.syncUI() }
         engine.onWindowsMaybeChanged = { [weak self] in self?.syncApps() }
 
@@ -104,20 +105,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         threeFinger.begin()
         slide.prepare()
         // Right ⌘ + ←/→ steps, Right ⌘ + a context's key jumps (left ⌘ stays for text).
-        var jumps: [Int64: String] = [:]
-        for ctx in engine.config.contexts { if let code = HotKeys.keyCode(for: ctx.key) { jumps[Int64(code)] = ctx.id } }
-        rightCommand.jumpKeys = Set(jumps.keys)
+        // Keys are looked up when pressed, so they follow the contexts when you reorder them.
+        var keys: [Int64: String] = [:]
+        for ctx in engine.config.contexts { if let code = HotKeys.keyCode(for: ctx.key) { keys[Int64(code)] = ctx.key } }
+        rightCommand.jumpKeys = Set(keys.keys)
         rightCommand.log = { [weak self] in self?.engine.note($0) }
         rightCommand.onStep = { [weak self] dir in self?.step(fingers: dir, reason: "right ⌘ arrow") }
         rightCommand.onJump = { [weak self] code in
-            if let id = jumps[code] { self?.userSwitch(to: id, reason: "right ⌘ key") }
+            if let key = keys[code], let id = self?.context(forKey: key) { self?.userSwitch(to: id, reason: "right ⌘ key") }
         }
         rightCommand.begin()
         for ctx in engine.config.contexts {
             guard let code = HotKeys.keyCode(for: ctx.key) else { continue }
-            let id = ctx.id
-            hotKeys.register(code, modifiers: [.control, .option]) { [weak self] in self?.userSwitch(to: id, reason: "hotkey") }
-            hotKeys.register(code, modifiers: [.control, .option, .shift]) { [weak self] in self?.engine.moveFocusedWindow(to: id) }
+            let key = ctx.key
+            hotKeys.register(code, modifiers: [.control, .option]) { [weak self] in
+                if let id = self?.context(forKey: key) { self?.userSwitch(to: id, reason: "hotkey") }
+            }
+            hotKeys.register(code, modifiers: [.control, .option, .shift]) { [weak self] in
+                if let id = self?.context(forKey: key) { self?.engine.moveFocusedWindow(to: id) }
+            }
         }
     }
 
@@ -380,6 +386,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         engine.config = config
         engine.note("dock: \(engine.current) is now \(apps.joined(separator: ", "))")
+    }
+
+    private func context(forKey key: String) -> String? { engine.config.contexts.first { $0.key == key }?.id }
+
+    /// New left-to-right order of the contexts, from dragging them in the Dock. Swipes and the arrow
+    /// keys follow it, and the number keys are renumbered so 1 is always the leftmost.
+    private func setOrder(_ ids: [String]) {
+        var config = engine.config
+        let byID = Dictionary(uniqueKeysWithValues: config.contexts.map { ($0.id, $0) })
+        let keys = config.contexts.map(\.key)
+        var contexts = ids.compactMap { byID[$0] }
+        guard contexts.count == config.contexts.count else { return }
+        // Only when the keys are 1, 2, 3…: custom keys stay with their context.
+        if keys == (1...keys.count).map(String.init) {
+            for i in contexts.indices { contexts[i].key = keys[i] }
+        }
+        config.contexts = contexts
+        config.save()
+        withAnimation(DockMotion.switch) { state.config = config }
+        engine.config = config
+        updateStatusItem()
+        engine.note("dock: contexts are now \(contexts.map { "\($0.key) \($0.id)" }.joined(separator: ", "))")
     }
 
     @objc private func switchFromMenu(_ sender: NSMenuItem) { userSwitch(to: sender.representedObject as! String, reason: "menu") }
